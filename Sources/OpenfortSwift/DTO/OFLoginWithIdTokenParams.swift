@@ -8,11 +8,9 @@
 public struct OFLoginWithIdTokenParams: OFCodableSendable {
     public let provider: String
     public let token: String
-    public let ecosystemGame: String?
 
-    public init(provider: String, token: String, ecosystemGame: String? = nil) {
+    public init(provider: String, token: String) {
         self.provider = provider
         self.token = token
-        self.ecosystemGame = ecosystemGame
     }
 }

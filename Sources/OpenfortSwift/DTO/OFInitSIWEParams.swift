@@ -7,10 +7,8 @@
 
 public struct OFInitSIWEParams: OFCodableSendable {
     public let address: String
-    public let ecosystemGame: String?
 
-    public init(address: String, ecosystemGame: String? = nil) {
+    public init(address: String) {
         self.address = address
-        self.ecosystemGame = ecosystemGame
     }
 }

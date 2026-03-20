@@ -8,10 +8,8 @@
 public struct OFInitOAuthParams: OFCodableSendable {
     public let provider: String
     public let options: [String: AnyCodable]?
-    public let ecosystemGame: String?
-    public init(provider: String, options: [String: AnyCodable]? = nil, ecosystemGame: String? = nil) {
+    public init(provider: String, options: [String: AnyCodable]? = nil) {
         self.provider = provider
         self.options = options
-        self.ecosystemGame = ecosystemGame
     }
 }

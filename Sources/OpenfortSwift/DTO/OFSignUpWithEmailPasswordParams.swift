@@ -17,12 +17,10 @@ public struct OFSignUpWithEmailPasswordParams: OFCodableSendable {
     public let email: String
     public let password: String
     public let options: OFSignUpWithEmailPasswordOptionsParams?
-    public let ecosystemGame: String?
 
-    public init(email: String, password: String, options: OFSignUpWithEmailPasswordOptionsParams? = nil, ecosystemGame: String? = nil) {
+    public init(email: String, password: String, options: OFSignUpWithEmailPasswordOptionsParams? = nil) {
         self.email = email
         self.password = password
         self.options = options
-        self.ecosystemGame = ecosystemGame
     }
 }

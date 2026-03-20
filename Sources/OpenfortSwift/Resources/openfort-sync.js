@@ -32,23 +32,22 @@ function safeCall(method, fn) {
 
 // AuthInstance sync methods
 
-window.logInWithEmailPasswordSync = function({ email, password, ecosystemGame }) {
-    handleResult('logInWithEmailPassword', window.openfort.authInstance.logInWithEmailPassword({ email, password, ecosystemGame }));
+window.logInWithEmailPasswordSync = function({ email, password }) {
+    handleResult('logInWithEmailPassword', window.openfort.authInstance.logInWithEmailPassword({ email, password }));
 };
 
 window.signUpGuestSync = function() {
     handleResult('signUpGuest', window.openfort.authInstance.signUpGuest());
 };
 
-window.signUpWithEmailPasswordSync = function({ email, password, name, ecosystemGame }) {
+window.signUpWithEmailPasswordSync = function({ email, password, name }) {
     const options = name ? { data: { name } } : undefined;
     handleResult(
         'signUpWithEmailPassword',
         window.openfort.authInstance.signUpWithEmailPassword({
             email,
             password,
-            options,
-            ecosystemGame
+            options
         })
     );
 };
@@ -81,11 +80,10 @@ window.verifyEmailSync = function({ token, callbackURL }) {
     }));
 };
 
-window.initOAuthSync = function({ provider, options, ecosystemGame }) {
+window.initOAuthSync = function({ provider, options }) {
     handleResult('initOAuth', window.openfort.authInstance.initOAuth({
         provider,
-        options,
-        ecosystemGame
+        options
     }));
 };
 
@@ -96,11 +94,10 @@ window.unlinkOAuthSync = function({ provider, authToken }) {
     }));
 };
 
-window.loginWithIdTokenSync = function({ provider, token, ecosystemGame }) {
+window.loginWithIdTokenSync = function({ provider, token }) {
     handleResult('loginWithIdToken', window.openfort.authInstance.loginWithIdToken({
         provider,
-        token,
-        ecosystemGame
+        token
     }));
 };
 
@@ -118,11 +115,10 @@ window.logoutSync = function() {
     handleResult('logout', window.openfort.authInstance.logout());
 };
 
-window.initLinkOAuthSync = function({ provider, options, ecosystemGame }) {
+window.initLinkOAuthSync = function({ provider, options }) {
     handleResult('initLinkOAuth', window.openfort.authInstance.initLinkOAuth({
         provider,
-        options,
-        ecosystemGame
+        options
     }));
 };
 
@@ -130,10 +126,9 @@ window.poolOAuthSync = function({ key }) {
     handleResult('poolOAuth', window.openfort.authInstance.poolOAuth({ key }));
 };
 
-window.initSIWESync = function({ address, ecosystemGame }) {
+window.initSIWESync = function({ address }) {
     handleResult('initSIWE', window.openfort.authInstance.initSIWE({
-        address,
-        ecosystemGame
+        address
     }));
 };
 
