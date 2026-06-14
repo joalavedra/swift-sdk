@@ -48,7 +48,7 @@ determines its capabilities:
 |---------------|-----------------|----------|-------|
 | `.eoa` | No | No | A plain externally-owned account. Chain-agnostic; users pay their own gas. |
 | `.smartAccount` | **Yes** | **Yes** | ERC-4337 smart account. Gasless + batching through the embedded provider with no extra setup — recommended for most apps. |
-| `.delegatedAccount` | Yes | Yes | EIP-7702: an EOA temporarily upgraded into a smart account. Requires signing a one-time authorization per chain. |
+| `.delegatedAccount` | **Yes** | **Yes** | EIP-7702: the user's EOA is delegated to a smart-account implementation (Calibur), so the wallet keeps a single address. Gasless through the provider — the SDK signs the one-time delegation authorization on the first send automatically. |
 
 A **smart account** is the simplest way to get gasless transactions: set
 `accountType: .smartAccount`, then pass a [gas sponsorship policy](https://www.openfort.io/docs/configuration/gas-sponsorship)

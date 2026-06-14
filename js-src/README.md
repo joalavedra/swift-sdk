@@ -4,29 +4,36 @@ Source for the prebuilt JS bundles checked into `Sources/OpenfortSwift/Resources
 committed so the SwiftPM package needs no Node toolchain to build; this directory keeps them
 reproducible.
 
-## viem-7702-entry.js → Resources/viem-7702.js
+## openfort-entry.js → Resources/openfort.js
 
-EIP-7702 send helper. Defines `window.__ofSend7702(args)` inside the SDK WebView: signs the one-time
-7702 authorization and the user operation with the embedded wallet's signer (no private-key export)
-and submits a sponsored userOp via Openfort's bundler + paymaster.
+The openfort-js SDK, bundled as a browser IIFE for the SDK WebView. It exposes the `Openfort` class
+as a global so `OFConfig.openfortSyncScript` can `new Openfort({ baseConfiguration,
+shieldConfiguration, overrides: { storage } })` and assign `window.openfort`. The bridge
+(`openfort-sync.js`) then drives it via `window.openfort.authInstance.*` /
+`window.openfort.embeddedWalletInstance.*`.
+
+Pin the version explicitly — delegated-account (EIP-7702 / Calibur) gasless sends through the
+provider require **openfort-js ≥ 1.3.2**, which signs the first-send authorization in `sendCallsSync`
+(older versions revert `AA24`).
 
 ### Build
 
 ```sh
-mkdir -p /tmp/viem7702 && cd /tmp/viem7702
+mkdir -p /tmp/ofjs && cd /tmp/ofjs
 npm init -y >/dev/null
-npm install viem@^2.52.2 esbuild@^0.28.1
-cp /path/to/repo/js-src/viem-7702-entry.js entry.js
+npm install @openfort/openfort-js@1.3.7 esbuild@^0.24.0
+cp /path/to/repo/js-src/openfort-entry.js entry.js
 ./node_modules/.bin/esbuild entry.js \
-  --bundle --format=iife --platform=browser --target=es2020 \
-  --outfile=/path/to/repo/Sources/OpenfortSwift/Resources/viem-7702.js
+  --bundle --minify --format=iife --platform=browser --target=es2020 \
+  --outfile=/path/to/repo/Sources/OpenfortSwift/Resources/openfort.js
 ```
 
-`--format=iife` so it runs as a single `WKUserScript`; `--platform=browser` so viem uses the
-WebView's `fetch`/`crypto`. After rebuilding, confirm the bundle still defines the helper and pulls
-in the expected viem APIs:
+`--format=iife` so it runs as a single `WKUserScript`; `--platform=browser` so openfort-js uses the
+WebView's `fetch`/`crypto`. Do **not** enable property mangling: the bridge reads the TypeScript
+`private` fields `authInstance` / `embeddedWalletInstance`, which are erased at runtime and must keep
+their names. After rebuilding, confirm the bundle still carries the bridge props and the 7702 fix:
 
 ```sh
-grep -oE "window.__ofSend7702|toSimple7702SmartAccount|hashAuthorization|sendUserOperation" \
-  Sources/OpenfortSwift/Resources/viem-7702.js | sort -u
+grep -oE "authInstance|embeddedWalletInstance|prepareAndSignAuthorization|isDelegatedTo" \
+  Sources/OpenfortSwift/Resources/openfort.js | sort -u
 ```

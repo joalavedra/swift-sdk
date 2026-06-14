@@ -127,7 +127,7 @@ window.poolOAuthSync = function({ key }) {
 };
 
 window.initSIWESync = function({ address }) {
-    handleResult('initSIWE', window.openfort.authInstance.initSIWE({
+    handleResult('initSIWE', window.openfort.authInstance.initSiwe({
         address
     }));
 };
@@ -140,7 +140,7 @@ window.unlinkWalletSync = function({ address, authToken }) {
 };
 
 window.authenticateWithSIWESync = function({ signature, message, walletClientType, connectorType }) {
-    handleResult('authenticateWithSIWE', window.openfort.authInstance.authenticateWithSIWE({
+    handleResult('authenticateWithSIWE', window.openfort.authInstance.loginWithSiwe({
         signature,
         message,
         walletClientType,

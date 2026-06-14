@@ -133,6 +133,10 @@ internal final class OFScriptMessageProcessor {
                     }
                 }
                 jsonData = try JSONSerialization.data(withJSONObject: dict, options: [])
+            } else if let array = data as? [Any] {
+                // Array responses (e.g. `list()` -> `[OFEmbeddedAccount]`). openfort-js ≥1.3.2
+                // returns a bare array here rather than a wrapper object.
+                jsonData = try JSONSerialization.data(withJSONObject: array, options: [])
             } else if let d = data as? T {
                 object = d
                 postNotification()
