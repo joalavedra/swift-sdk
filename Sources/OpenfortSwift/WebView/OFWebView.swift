@@ -52,6 +52,9 @@ internal class OFWebView: WKWebView {
         addScript(named: "openfort", injectionTime: .atDocumentStart)
         addScript(named: "utils", injectionTime: .atDocumentStart)
         addScript(named: "openfort-sync", injectionTime: .atDocumentStart)
+        // Bundled viem + EIP-7702 send helper (defines window.__ofSend7702). It only touches
+        // window.openfort when invoked, so document-start injection is fine.
+        addScript(named: "viem-7702", injectionTime: .atDocumentStart)
         
         let script = OFConfig.openfortSyncScript(provider: provider)
         let userScript = WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: false)

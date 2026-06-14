@@ -47,67 +47,152 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
         // 1) Build JSON for `params`
         let paramsJSONString = makeParamsJSONString(request.params) ?? "[]"
 
-        // 2) Build JS that lazily caches the provider and forwards the request
-        let js = """
-        (async function(){
-          try {
-            if (!window.__ofProvider) {
-              if (!window.openfort || !window.openfort.getEthereumProvider) {
-                throw new Error('Openfort provider not available in page');
-              }
-                            window.__ofProvider = await window.openfort.getEthereumProvider(\(getProviderParamsJSArgument()));
-            }
-            const result = await window.__ofProvider.request({
-              method: "\(request.method)",
-              params: \(paramsJSONString)
-            });
-            return { ok: true, result };
-          } catch (e) {
-            return { ok: false, error: (e && (e.message || String(e))) };
+        // 2) Build the async function body. We must use `callAsyncJavaScript`, which awaits the
+        //    returned promise — `evaluateJavaScript` does not, and a returned Promise fails to
+        //    bridge ("WKError code 5: result of an unsupported type"), breaking every request.
+        let body = """
+        if (!window.__ofProvider) {
+          if (!window.openfort || !window.openfort.embeddedWalletInstance) {
+            throw new Error('Openfort embedded wallet not available in page');
           }
-        })();
+          window.__ofProvider = await window.openfort.embeddedWalletInstance.getEthereumProvider(\(getProviderParamsJSArgument()));
+        }
+        return await window.__ofProvider.request({
+          method: "\(request.method)",
+          params: \(paramsJSONString)
+        });
         """
 
         // 3) Evaluate and map back to Web3Response<Result>
-        webView.evaluateJavaScript(js) { value, jsError in
-            if let jsError {
+        webView.callAsyncJavaScript(body, arguments: [:], in: nil, in: .page, completionHandler: { jsResult in
+            switch jsResult {
+            case .failure(let jsError):
+                let wrapped = NSError(
+                    domain: "OpenfortEIP1193Web3Provider", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: Self.jsErrorMessage(jsError)]
+                )
                 self.callbackQueue.async {
-                    response(Web3Response<Result>(error: Web3Response<Result>.Error.requestFailed(jsError)))
+                    response(Web3Response<Result>(error: Web3Response<Result>.Error.requestFailed(wrapped)))
                 }
-                return
-            }
-
-            guard let dict = value as? [String: Any] else {
-                self.callbackQueue.async {
-                    response(Web3Response<Result>(error: Web3Response<Result>.Error.emptyResponse))
-                }
-                return
-            }
-
-            if (dict["ok"] as? Bool) == true {
-                let resultAny = dict["result"]
-                // Try to decode into Result
-                if let decoded: Result = self.decodeResult(resultAny) {
+            case .success(let value):
+                if let decoded: Result = self.decodeResult(value) {
                     self.callbackQueue.async {
                         response(Web3Response<Result>(status: .success(decoded)))
                     }
                 } else {
-                    // If we fail to decode, surface a decoding error
                     self.callbackQueue.async {
                         response(Web3Response<Result>(error: Web3Response<Result>.Error.decodingError(nil)))
                     }
                 }
-            } else {
-                let message = (dict["error"] as? String) ?? "Unknown JS bridge error"
-                let err = NSError(domain: "OpenfortEIP1193Web3Provider", code: -1,
-                                  userInfo: [NSLocalizedDescriptionKey: message])
-                self.callbackQueue.async {
-                    response(Web3Response<Result>(error: Web3Response<Result>.Error.serverError(err)))
+            }
+        })
+    }
+    
+    // MARK: - Async request (Web3.swift-free)
+
+    /// EIP-1193 `request`, async and free of Web3.swift types. Forwards `{ method, params }` to the
+    /// page provider and returns the result as a `String` (e.g. a transaction hash for
+    /// `eth_sendTransaction`, or a hex value for `eth_call` / `eth_chainId`). Object/array results
+    /// are returned as a JSON string. Throws `OFProviderError` on bridge or provider errors.
+    ///
+    /// Use this instead of `send(request:response:)` when you don't want to depend on Boilertalk
+    /// Web3.swift (`RPCRequest` / `Web3Response`) just to make a JSON-RPC call.
+    @MainActor
+    @discardableResult
+    public func request(method: String, params: [Any] = []) async throws -> String? {
+        guard let webView else { throw OFProviderError.connectionFailed }
+
+        let paramsJSON = (try? JSONSerialization.data(withJSONObject: params))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+
+        // `window.openfort` is injected by the SDK's legacy user scripts and lives in the page's
+        // default world — `callAsyncJavaScript`'s named content worlds (`.page`/`.defaultClient`)
+        // can't see it. So we run in that world via `evaluateJavaScript` (the same path the SDK's
+        // other bridges use), kick off the async request, stash the settled result on `window`,
+        // and poll for it — `evaluateJavaScript` can't await a promise, but it can read a value.
+        let id = Self.nextRequestId()
+        let kickoff = """
+        (function(){
+          window.__ofRpc = window.__ofRpc || {};
+          window.__ofRpc[\(id)] = null;
+          (async function(){
+            try {
+              if (!window.__ofProvider) {
+                if (!window.openfort || !window.openfort.embeddedWalletInstance) {
+                  throw new Error('Openfort embedded wallet not available in page');
+                }
+                window.__ofProvider = await window.openfort.embeddedWalletInstance.getEthereumProvider(\(getProviderParamsJSArgument()));
+              }
+              const result = await window.__ofProvider.request({ method: "\(method)", params: \(paramsJSON) });
+              window.__ofRpc[\(id)] = { ok: true, result: (result === undefined ? null : result) };
+            } catch (e) {
+              window.__ofRpc[\(id)] = { ok: false, error: (e && (e.message || String(e))) || 'Provider request failed' };
+            }
+          })();
+        })();
+        """
+        _ = try await Self.evaluate(kickoff, on: webView)
+
+        let poll = "JSON.stringify((window.__ofRpc && window.__ofRpc[\(id)]) || null)"
+        let deadline = Date().addingTimeInterval(60)
+        while Date() < deadline {
+            if let json = try await Self.evaluate(poll, on: webView), json != "null", !json.isEmpty,
+               let data = json.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                _ = try? await Self.evaluate("delete window.__ofRpc[\(id)]", on: webView)
+                if (object["ok"] as? Bool) == true {
+                    return Self.stringify(object["result"])
+                }
+                throw OFProviderError.requestFailed((object["error"] as? String) ?? "Provider request failed")
+            }
+            try await Task.sleep(nanoseconds: 150_000_000)
+        }
+        throw OFProviderError.requestFailed("Provider request timed out")
+    }
+
+    @MainActor private static var requestCounter = 0
+    @MainActor private static func nextRequestId() -> Int {
+        requestCounter += 1
+        return requestCounter
+    }
+
+    /// Runs JS in the page's default world (via `evaluateJavaScript`) and returns a String result.
+    @MainActor
+    private static func evaluate(_ js: String, on webView: WKWebView) async throws -> String? {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String?, Error>) in
+            webView.evaluateJavaScript(js) { value, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: value as? String)
                 }
             }
         }
     }
-    
+
+    /// Extracts the underlying JavaScript exception message from a `callAsyncJavaScript` error,
+    /// which otherwise surfaces only as a generic "A JavaScript exception occurred".
+    static func jsErrorMessage(_ error: Error) -> String {
+        let nsError = error as NSError
+        if let message = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String, !message.isEmpty {
+            return message
+        }
+        return nsError.localizedDescription
+    }
+
+    /// Coerces a JS result value into a `String` (passing strings through, JSON-encoding objects).
+    private static func stringify(_ any: Any?) -> String? {
+        guard let any, !(any is NSNull) else { return nil }
+        if let string = any as? String { return string }
+        if let number = any as? NSNumber { return number.stringValue }
+        if JSONSerialization.isValidJSONObject(any),
+           let data = try? JSONSerialization.data(withJSONObject: any),
+           let json = String(data: data, encoding: .utf8) {
+            return json
+        }
+        return String(describing: any)
+    }
+
     private func getProviderParamsJSArgument() -> String {
         guard let p = getProviderParams else { return "undefined" }
         do {
@@ -201,5 +286,19 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
         }
 
         return nil
+    }
+}
+
+public enum OFProviderError: Error, LocalizedError {
+    case connectionFailed
+    case emptyResponse
+    case requestFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .connectionFailed: return "The Openfort provider WebView is unavailable."
+        case .emptyResponse:    return "The Openfort provider returned no response."
+        case .requestFailed(let message): return message
+        }
     }
 }

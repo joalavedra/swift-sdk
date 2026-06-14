@@ -6,7 +6,8 @@ internal struct OFConfig: Codable {
     let openfortPublishableKey: String
     let shieldPublishableKey: String
     let shieldUrl: String?
-    let debug: Bool
+    // Optional: a missing `debug` key must not make the whole plist fail to decode.
+    let debug: Bool?
     
     static func loadFromMainBundle() -> OFConfig? {
         guard let url = Bundle.main.url(forResource: "OFConfig", withExtension: "plist"),
@@ -30,7 +31,7 @@ internal struct OFConfig: Codable {
             return ""
         }
 
-        let debugValue = config.debug
+        let debugValue = config.debug ?? false
 
         var overrides: [String] = []
         if let iframeURL = config.iframeUrl, !iframeURL.isEmpty {
