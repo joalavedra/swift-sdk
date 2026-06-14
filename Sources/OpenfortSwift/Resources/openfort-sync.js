@@ -274,6 +274,56 @@ window.getEmbeddedStateSync = function() {
     handleResult('getEmbeddedState', window.openfort.embeddedWalletInstance.getEmbeddedState());
 };
 
+// Embedded-state change watcher.
+//
+// openfort-js has no dedicated "embedded state changed" event: getEmbeddedState() is a
+// pure value computed from storage (UNAUTHENTICATED / EMBEDDED_SIGNER_NOT_CONFIGURED /
+// READY). What it *does* expose is a public lifecycle emitter on window.openfort.eventEmitter
+// that fires on exactly the events that move that value: auth success/failure, logout,
+// embedded wallet created/recovered, and account switch. We subscribe to those, re-read the
+// state on each, and push it to native — turning a 1s busy poll into event-driven updates.
+//
+// One transition isn't covered by an event: embeddedWalletInstance.configure() persists the
+// signer (NOT_CONFIGURED -> READY) without emitting. The native side closes that gap with a
+// short bounded poll after each push; this watcher only handles the event-driven majority.
+window.__ofWatchEmbeddedState = function() {
+    if (window.__ofEmbeddedStateWatching) {
+        return true;
+    }
+    var of = window.openfort;
+    if (!of || !of.eventEmitter || typeof of.eventEmitter.on !== 'function') {
+        // Bridge not fully constructed yet; retry briefly. The native side also runs a
+        // bounded backstop poll, so this is just to wire events as early as possible.
+        if ((window.__ofWatchRetries = (window.__ofWatchRetries || 0) + 1) <= 50) {
+            setTimeout(window.__ofWatchEmbeddedState, 100);
+        }
+        return false;
+    }
+    window.__ofEmbeddedStateWatching = true;
+
+    var push = function() {
+        try {
+            Promise.resolve(of.embeddedWalletInstance.getEmbeddedState())
+                .then(function(state) {
+                    window.webkit.messageHandlers.userHandler.postMessage({
+                        method: 'embeddedStateChanged', success: true, data: state
+                    });
+                })
+                .catch(function() { /* transient read error; native poll backstops it */ });
+        } catch (e) { /* ignore */ }
+    };
+
+    ['onAuthSuccess', 'onAuthFailure', 'onLogout',
+     'onEmbeddedWalletCreated', 'onEmbeddedWalletRecovered',
+     'onSwitchAccount'].forEach(function(evt) {
+        try { of.eventEmitter.on(evt, push); } catch (e) { /* unknown event: skip */ }
+    });
+
+    // Emit the current state once so native starts from the real value, not a guess.
+    push();
+    return true;
+};
+
 window.getURLSync = function() {
     handleResult('getURL', window.openfort.embeddedWalletInstance.getURL());
 };

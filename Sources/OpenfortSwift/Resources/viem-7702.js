@@ -3602,19 +3602,12 @@
     const maxLength = entries.reduce((acc, [key]) => Math.max(acc, key.length), 0);
     return entries.map(([key, value]) => `  ${`${key}:`.padEnd(maxLength + 1)}  ${value}`).join("\n");
   }
-  var InvalidLegacyVError, InvalidSerializableTransactionError, InvalidStorageKeySizeError, TransactionExecutionError, TransactionNotFoundError, TransactionReceiptNotFoundError, TransactionReceiptRevertedError, WaitForTransactionReceiptTimeoutError;
+  var InvalidSerializableTransactionError, TransactionExecutionError, TransactionNotFoundError, TransactionReceiptNotFoundError, TransactionReceiptRevertedError, WaitForTransactionReceiptTimeoutError;
   var init_transaction = __esm({
     "node_modules/viem/_esm/errors/transaction.js"() {
       init_formatEther();
       init_formatGwei();
       init_base();
-      InvalidLegacyVError = class extends BaseError2 {
-        constructor({ v }) {
-          super(`Invalid \`v\` value "${v}". Expected 27 or 28.`, {
-            name: "InvalidLegacyVError"
-          });
-        }
-      };
       InvalidSerializableTransactionError = class extends BaseError2 {
         constructor({ transaction }) {
           super("Cannot infer a transaction type from provided transaction.", {
@@ -3634,11 +3627,6 @@
             ],
             name: "InvalidSerializableTransactionError"
           });
-        }
-      };
-      InvalidStorageKeySizeError = class extends BaseError2 {
-        constructor({ storageKey }) {
-          super(`Size for storage key "${storageKey}" is invalid. Expected 32 bytes. Got ${Math.floor((storageKey.length - 2) / 2)} bytes.`, { name: "InvalidStorageKeySizeError" });
         }
       };
       TransactionExecutionError = class extends BaseError2 {
@@ -6419,7 +6407,7 @@ ${prettyStateOverride(stateOverride)}`;
     }
     const defaultSigOpts = { lowS: CURVE.lowS, prehash: false };
     const defaultVerOpts = { lowS: CURVE.lowS, prehash: false };
-    function sign2(msgHash, privKey, opts = defaultSigOpts) {
+    function sign(msgHash, privKey, opts = defaultSigOpts) {
       const { seed, k2sig } = prepSig(msgHash, privKey, opts);
       const C = CURVE;
       const drbg = createHmacDrbg(C.hash.outputLen, C.nByteLength, C.hmac);
@@ -6481,7 +6469,7 @@ ${prettyStateOverride(stateOverride)}`;
       CURVE,
       getPublicKey,
       getSharedSecret,
-      sign: sign2,
+      sign,
       verify,
       ProjectivePoint: Point2,
       Signature,
@@ -7629,32 +7617,6 @@ ${prettyStateOverride(stateOverride)}`;
     }
   });
 
-  // node_modules/viem/_esm/utils/formatters/formatter.js
-  function defineFormatter(type, format) {
-    return ({ exclude, format: overrides }) => {
-      return {
-        exclude,
-        format: (args, action) => {
-          const formatted = format(args, action);
-          if (exclude) {
-            for (const key of exclude) {
-              delete formatted[key];
-            }
-          }
-          return {
-            ...formatted,
-            ...overrides(args, action)
-          };
-        },
-        type
-      };
-    };
-  }
-  var init_formatter = __esm({
-    "node_modules/viem/_esm/utils/formatters/formatter.js"() {
-    }
-  });
-
   // node_modules/viem/_esm/utils/formatters/transactionRequest.js
   function formatTransactionRequest(request, _) {
     const rpcRequest = {};
@@ -8019,11 +7981,10 @@ ${prettyStateOverride(stateOverride)}`;
       yParity: Number(authorization.yParity)
     }));
   }
-  var transactionType, defineTransaction;
+  var transactionType;
   var init_transaction2 = __esm({
     "node_modules/viem/_esm/utils/formatters/transaction.js"() {
       init_fromHex();
-      init_formatter();
       transactionType = {
         "0x0": "legacy",
         "0x1": "eip2930",
@@ -8031,7 +7992,6 @@ ${prettyStateOverride(stateOverride)}`;
         "0x3": "eip4844",
         "0x4": "eip7702"
       };
-      defineTransaction = /* @__PURE__ */ defineFormatter("transaction", formatTransaction);
     }
   });
 
@@ -8060,12 +8020,9 @@ ${prettyStateOverride(stateOverride)}`;
       totalDifficulty: block.totalDifficulty ? BigInt(block.totalDifficulty) : null
     };
   }
-  var defineBlock;
   var init_block2 = __esm({
     "node_modules/viem/_esm/utils/formatters/block.js"() {
-      init_formatter();
       init_transaction2();
-      defineBlock = /* @__PURE__ */ defineFormatter("block", formatBlock);
     }
   });
 
@@ -8374,19 +8331,10 @@ ${prettyStateOverride(stateOverride)}`;
     }
   });
 
-  // node_modules/viem/_esm/constants/kzg.js
-  var versionedHashVersionKzg;
-  var init_kzg = __esm({
-    "node_modules/viem/_esm/constants/kzg.js"() {
-      versionedHashVersionKzg = 1;
-    }
-  });
-
   // node_modules/viem/_esm/errors/blob.js
-  var BlobSizeTooLargeError, EmptyBlobError, InvalidVersionedHashSizeError, InvalidVersionedHashVersionError;
+  var BlobSizeTooLargeError, EmptyBlobError;
   var init_blob2 = __esm({
     "node_modules/viem/_esm/errors/blob.js"() {
-      init_kzg();
       init_base();
       BlobSizeTooLargeError = class extends BaseError2 {
         constructor({ maxSize, size: size5 }) {
@@ -8399,25 +8347,6 @@ ${prettyStateOverride(stateOverride)}`;
       EmptyBlobError = class extends BaseError2 {
         constructor() {
           super("Blob data must not be empty.", { name: "EmptyBlobError" });
-        }
-      };
-      InvalidVersionedHashSizeError = class extends BaseError2 {
-        constructor({ hash: hash3, size: size5 }) {
-          super(`Versioned hash "${hash3}" size is invalid.`, {
-            metaMessages: ["Expected: 32", `Received: ${size5}`],
-            name: "InvalidVersionedHashSizeError"
-          });
-        }
-      };
-      InvalidVersionedHashVersionError = class extends BaseError2 {
-        constructor({ hash: hash3, version: version4 }) {
-          super(`Versioned hash "${hash3}" version is invalid.`, {
-            metaMessages: [
-              `Expected: ${versionedHashVersionKzg}`,
-              `Received: ${version4}`
-            ],
-            name: "InvalidVersionedHashVersionError"
-          });
         }
       };
     }
@@ -10521,7 +10450,7 @@ ${prettyStateOverride(stateOverride)}`;
   });
 
   // node_modules/viem/_esm/errors/chain.js
-  var ChainDoesNotSupportContract, ClientChainNotConfiguredError, InvalidChainIdError;
+  var ChainDoesNotSupportContract, ClientChainNotConfiguredError;
   var init_chain = __esm({
     "node_modules/viem/_esm/errors/chain.js"() {
       init_base();
@@ -10545,11 +10474,6 @@ ${prettyStateOverride(stateOverride)}`;
           super("No chain was provided to the Client.", {
             name: "ClientChainNotConfiguredError"
           });
-        }
-      };
-      InvalidChainIdError = class extends BaseError2 {
-        constructor({ chainId }) {
-          super(typeof chainId === "number" ? `Chain ID "${chainId}" is invalid.` : "Chain ID is invalid.", { name: "InvalidChainIdError" });
         }
       };
     }
@@ -11901,18 +11825,16 @@ ${prettyStateOverride(stateOverride)}`;
       receipt.blobGasUsed = BigInt(transactionReceipt.blobGasUsed);
     return receipt;
   }
-  var receiptStatuses, defineTransactionReceipt;
+  var receiptStatuses;
   var init_transactionReceipt = __esm({
     "node_modules/viem/_esm/utils/formatters/transactionReceipt.js"() {
       init_fromHex();
-      init_formatter();
       init_log2();
       init_transaction2();
       receiptStatuses = {
         "0x0": "reverted",
         "0x1": "success"
       };
-      defineTransactionReceipt = /* @__PURE__ */ defineFormatter("transactionReceipt", formatTransactionReceipt);
     }
   });
 
@@ -13062,357 +12984,6 @@ ${prettyStateOverride(stateOverride)}`;
     "node_modules/viem/_esm/actions/public/getFilterLogs.js"() {
       init_parseEventLogs();
       init_log2();
-    }
-  });
-
-  // node_modules/viem/_esm/utils/transaction/assertTransaction.js
-  function assertTransactionEIP7702(transaction) {
-    const { authorizationList } = transaction;
-    if (authorizationList) {
-      for (const authorization of authorizationList) {
-        const { chainId } = authorization;
-        const address = authorization.address;
-        if (!isAddress(address))
-          throw new InvalidAddressError({ address });
-        if (chainId < 0)
-          throw new InvalidChainIdError({ chainId });
-      }
-    }
-    assertTransactionEIP1559(transaction);
-  }
-  function assertTransactionEIP4844(transaction) {
-    const { blobVersionedHashes } = transaction;
-    if (blobVersionedHashes) {
-      if (blobVersionedHashes.length === 0)
-        throw new EmptyBlobError();
-      for (const hash3 of blobVersionedHashes) {
-        const size_ = size(hash3);
-        const version4 = hexToNumber(slice(hash3, 0, 1));
-        if (size_ !== 32)
-          throw new InvalidVersionedHashSizeError({ hash: hash3, size: size_ });
-        if (version4 !== versionedHashVersionKzg)
-          throw new InvalidVersionedHashVersionError({
-            hash: hash3,
-            version: version4
-          });
-      }
-    }
-    assertTransactionEIP1559(transaction);
-  }
-  function assertTransactionEIP1559(transaction) {
-    const { chainId, maxPriorityFeePerGas, maxFeePerGas, to } = transaction;
-    if (chainId <= 0)
-      throw new InvalidChainIdError({ chainId });
-    if (to && !isAddress(to))
-      throw new InvalidAddressError({ address: to });
-    if (maxFeePerGas && maxFeePerGas > maxUint256)
-      throw new FeeCapTooHighError({ maxFeePerGas });
-    if (maxPriorityFeePerGas && maxFeePerGas && maxPriorityFeePerGas > maxFeePerGas)
-      throw new TipAboveFeeCapError({ maxFeePerGas, maxPriorityFeePerGas });
-  }
-  function assertTransactionEIP2930(transaction) {
-    const { chainId, maxPriorityFeePerGas, gasPrice, maxFeePerGas, to } = transaction;
-    if (chainId <= 0)
-      throw new InvalidChainIdError({ chainId });
-    if (to && !isAddress(to))
-      throw new InvalidAddressError({ address: to });
-    if (maxPriorityFeePerGas || maxFeePerGas)
-      throw new BaseError2("`maxFeePerGas`/`maxPriorityFeePerGas` is not a valid EIP-2930 Transaction attribute.");
-    if (gasPrice && gasPrice > maxUint256)
-      throw new FeeCapTooHighError({ maxFeePerGas: gasPrice });
-  }
-  function assertTransactionLegacy(transaction) {
-    const { chainId, maxPriorityFeePerGas, gasPrice, maxFeePerGas, to } = transaction;
-    if (to && !isAddress(to))
-      throw new InvalidAddressError({ address: to });
-    if (typeof chainId !== "undefined" && chainId <= 0)
-      throw new InvalidChainIdError({ chainId });
-    if (maxPriorityFeePerGas || maxFeePerGas)
-      throw new BaseError2("`maxFeePerGas`/`maxPriorityFeePerGas` is not a valid Legacy Transaction attribute.");
-    if (gasPrice && gasPrice > maxUint256)
-      throw new FeeCapTooHighError({ maxFeePerGas: gasPrice });
-  }
-  var init_assertTransaction = __esm({
-    "node_modules/viem/_esm/utils/transaction/assertTransaction.js"() {
-      init_kzg();
-      init_number();
-      init_address();
-      init_base();
-      init_blob2();
-      init_chain();
-      init_node();
-      init_isAddress();
-      init_size();
-      init_slice();
-      init_fromHex();
-    }
-  });
-
-  // node_modules/viem/_esm/utils/transaction/serializeAccessList.js
-  function serializeAccessList(accessList) {
-    if (!accessList || accessList.length === 0)
-      return [];
-    const serializedAccessList = [];
-    for (let i = 0; i < accessList.length; i++) {
-      const { address, storageKeys } = accessList[i];
-      for (let j = 0; j < storageKeys.length; j++) {
-        if (storageKeys[j].length - 2 !== 64) {
-          throw new InvalidStorageKeySizeError({ storageKey: storageKeys[j] });
-        }
-      }
-      if (!isAddress(address, { strict: false })) {
-        throw new InvalidAddressError({ address });
-      }
-      serializedAccessList.push([address, storageKeys]);
-    }
-    return serializedAccessList;
-  }
-  var init_serializeAccessList = __esm({
-    "node_modules/viem/_esm/utils/transaction/serializeAccessList.js"() {
-      init_address();
-      init_transaction();
-      init_isAddress();
-    }
-  });
-
-  // node_modules/viem/_esm/utils/transaction/serializeTransaction.js
-  function serializeTransaction(transaction, signature) {
-    const type = getTransactionType(transaction);
-    if (type === "eip1559")
-      return serializeTransactionEIP1559(transaction, signature);
-    if (type === "eip2930")
-      return serializeTransactionEIP2930(transaction, signature);
-    if (type === "eip4844")
-      return serializeTransactionEIP4844(transaction, signature);
-    if (type === "eip7702")
-      return serializeTransactionEIP7702(transaction, signature);
-    return serializeTransactionLegacy(transaction, signature);
-  }
-  function serializeTransactionEIP7702(transaction, signature) {
-    const { authorizationList, chainId, gas, nonce, to, value, maxFeePerGas, maxPriorityFeePerGas, accessList, data } = transaction;
-    assertTransactionEIP7702(transaction);
-    const serializedAccessList = serializeAccessList(accessList);
-    const serializedAuthorizationList = serializeAuthorizationList(authorizationList);
-    return concatHex([
-      "0x04",
-      toRlp([
-        numberToHex(chainId),
-        nonce ? numberToHex(nonce) : "0x",
-        maxPriorityFeePerGas ? numberToHex(maxPriorityFeePerGas) : "0x",
-        maxFeePerGas ? numberToHex(maxFeePerGas) : "0x",
-        gas ? numberToHex(gas) : "0x",
-        to ?? "0x",
-        value ? numberToHex(value) : "0x",
-        data ?? "0x",
-        serializedAccessList,
-        serializedAuthorizationList,
-        ...toYParitySignatureArray(transaction, signature)
-      ])
-    ]);
-  }
-  function serializeTransactionEIP4844(transaction, signature) {
-    const { chainId, gas, nonce, to, value, maxFeePerBlobGas, maxFeePerGas, maxPriorityFeePerGas, accessList, data } = transaction;
-    assertTransactionEIP4844(transaction);
-    let blobVersionedHashes = transaction.blobVersionedHashes;
-    let sidecars = transaction.sidecars;
-    if (transaction.blobs && (typeof blobVersionedHashes === "undefined" || typeof sidecars === "undefined")) {
-      const blobs2 = typeof transaction.blobs[0] === "string" ? transaction.blobs : transaction.blobs.map((x) => bytesToHex(x));
-      const kzg = transaction.kzg;
-      const commitments2 = blobsToCommitments({
-        blobs: blobs2,
-        kzg
-      });
-      if (typeof blobVersionedHashes === "undefined")
-        blobVersionedHashes = commitmentsToVersionedHashes({
-          commitments: commitments2
-        });
-      if (typeof sidecars === "undefined") {
-        const proofs2 = blobsToProofs({ blobs: blobs2, commitments: commitments2, kzg });
-        sidecars = toBlobSidecars({ blobs: blobs2, commitments: commitments2, proofs: proofs2 });
-      }
-    }
-    const serializedAccessList = serializeAccessList(accessList);
-    const serializedTransaction = [
-      numberToHex(chainId),
-      nonce ? numberToHex(nonce) : "0x",
-      maxPriorityFeePerGas ? numberToHex(maxPriorityFeePerGas) : "0x",
-      maxFeePerGas ? numberToHex(maxFeePerGas) : "0x",
-      gas ? numberToHex(gas) : "0x",
-      to ?? "0x",
-      value ? numberToHex(value) : "0x",
-      data ?? "0x",
-      serializedAccessList,
-      maxFeePerBlobGas ? numberToHex(maxFeePerBlobGas) : "0x",
-      blobVersionedHashes ?? [],
-      ...toYParitySignatureArray(transaction, signature)
-    ];
-    const blobs = [];
-    const commitments = [];
-    const proofs = [];
-    if (sidecars)
-      for (let i = 0; i < sidecars.length; i++) {
-        const { blob, commitment, proof } = sidecars[i];
-        blobs.push(blob);
-        commitments.push(commitment);
-        proofs.push(proof);
-      }
-    return concatHex([
-      "0x03",
-      sidecars ? (
-        // If sidecars are enabled, envelope turns into a "wrapper":
-        toRlp([serializedTransaction, blobs, commitments, proofs])
-      ) : (
-        // If sidecars are disabled, standard envelope is used:
-        toRlp(serializedTransaction)
-      )
-    ]);
-  }
-  function serializeTransactionEIP1559(transaction, signature) {
-    const { chainId, gas, nonce, to, value, maxFeePerGas, maxPriorityFeePerGas, accessList, data } = transaction;
-    assertTransactionEIP1559(transaction);
-    const serializedAccessList = serializeAccessList(accessList);
-    const serializedTransaction = [
-      numberToHex(chainId),
-      nonce ? numberToHex(nonce) : "0x",
-      maxPriorityFeePerGas ? numberToHex(maxPriorityFeePerGas) : "0x",
-      maxFeePerGas ? numberToHex(maxFeePerGas) : "0x",
-      gas ? numberToHex(gas) : "0x",
-      to ?? "0x",
-      value ? numberToHex(value) : "0x",
-      data ?? "0x",
-      serializedAccessList,
-      ...toYParitySignatureArray(transaction, signature)
-    ];
-    return concatHex([
-      "0x02",
-      toRlp(serializedTransaction)
-    ]);
-  }
-  function serializeTransactionEIP2930(transaction, signature) {
-    const { chainId, gas, data, nonce, to, value, accessList, gasPrice } = transaction;
-    assertTransactionEIP2930(transaction);
-    const serializedAccessList = serializeAccessList(accessList);
-    const serializedTransaction = [
-      numberToHex(chainId),
-      nonce ? numberToHex(nonce) : "0x",
-      gasPrice ? numberToHex(gasPrice) : "0x",
-      gas ? numberToHex(gas) : "0x",
-      to ?? "0x",
-      value ? numberToHex(value) : "0x",
-      data ?? "0x",
-      serializedAccessList,
-      ...toYParitySignatureArray(transaction, signature)
-    ];
-    return concatHex([
-      "0x01",
-      toRlp(serializedTransaction)
-    ]);
-  }
-  function serializeTransactionLegacy(transaction, signature) {
-    const { chainId = 0, gas, data, nonce, to, value, gasPrice } = transaction;
-    assertTransactionLegacy(transaction);
-    let serializedTransaction = [
-      nonce ? numberToHex(nonce) : "0x",
-      gasPrice ? numberToHex(gasPrice) : "0x",
-      gas ? numberToHex(gas) : "0x",
-      to ?? "0x",
-      value ? numberToHex(value) : "0x",
-      data ?? "0x"
-    ];
-    if (signature) {
-      const v = (() => {
-        if (signature.v >= 35n) {
-          const inferredChainId = (signature.v - 35n) / 2n;
-          if (inferredChainId > 0)
-            return signature.v;
-          return 27n + (signature.v === 35n ? 0n : 1n);
-        }
-        if (chainId > 0)
-          return BigInt(chainId * 2) + BigInt(35n + signature.v - 27n);
-        const v2 = 27n + (signature.v === 27n ? 0n : 1n);
-        if (signature.v !== v2)
-          throw new InvalidLegacyVError({ v: signature.v });
-        return v2;
-      })();
-      const r = trim(signature.r);
-      const s = trim(signature.s);
-      serializedTransaction = [
-        ...serializedTransaction,
-        numberToHex(v),
-        r === "0x00" ? "0x" : r,
-        s === "0x00" ? "0x" : s
-      ];
-    } else if (chainId > 0) {
-      serializedTransaction = [
-        ...serializedTransaction,
-        numberToHex(chainId),
-        "0x",
-        "0x"
-      ];
-    }
-    return toRlp(serializedTransaction);
-  }
-  function toYParitySignatureArray(transaction, signature_) {
-    const signature = signature_ ?? transaction;
-    const { v, yParity } = signature;
-    if (typeof signature.r === "undefined")
-      return [];
-    if (typeof signature.s === "undefined")
-      return [];
-    if (typeof v === "undefined" && typeof yParity === "undefined")
-      return [];
-    const r = trim(signature.r);
-    const s = trim(signature.s);
-    const yParity_ = (() => {
-      if (typeof yParity === "number")
-        return yParity ? numberToHex(1) : "0x";
-      if (v === 0n)
-        return "0x";
-      if (v === 1n)
-        return numberToHex(1);
-      return v === 27n ? "0x" : numberToHex(1);
-    })();
-    return [yParity_, r === "0x00" ? "0x" : r, s === "0x00" ? "0x" : s];
-  }
-  var init_serializeTransaction = __esm({
-    "node_modules/viem/_esm/utils/transaction/serializeTransaction.js"() {
-      init_transaction();
-      init_serializeAuthorizationList();
-      init_blobsToCommitments();
-      init_blobsToProofs();
-      init_commitmentsToVersionedHashes();
-      init_toBlobSidecars();
-      init_concat();
-      init_trim();
-      init_toHex();
-      init_toRlp();
-      init_assertTransaction();
-      init_getTransactionType();
-      init_serializeAccessList();
-    }
-  });
-
-  // node_modules/viem/_esm/utils/authorization/serializeAuthorizationList.js
-  function serializeAuthorizationList(authorizationList) {
-    if (!authorizationList || authorizationList.length === 0)
-      return [];
-    const serializedAuthorizationList = [];
-    for (const authorization of authorizationList) {
-      const { chainId, nonce, ...signature } = authorization;
-      const contractAddress = authorization.address;
-      serializedAuthorizationList.push([
-        chainId ? toHex(chainId) : "0x",
-        contractAddress,
-        nonce ? toHex(nonce) : "0x",
-        ...toYParitySignatureArray({}, signature)
-      ]);
-    }
-    return serializedAuthorizationList;
-  }
-  var init_serializeAuthorizationList = __esm({
-    "node_modules/viem/_esm/utils/authorization/serializeAuthorizationList.js"() {
-      init_toHex();
-      init_serializeTransaction();
     }
   });
 
@@ -15934,6 +15505,7 @@ ${prettyStateOverride(stateOverride)}`;
   // node_modules/viem/_esm/utils/index.js
   var init_utils6 = __esm({
     "node_modules/viem/_esm/utils/index.js"() {
+      init_hashAuthorization();
       init_pad();
       init_fromHex();
       init_toHex();
@@ -16088,7 +15660,7 @@ ${prettyStateOverride(stateOverride)}`;
   // node_modules/viem/_esm/actions/public/multicall.js
   async function multicall(client, parameters) {
     const { account, authorizationList, allowFailure = true, blockHash, blockNumber, blockOverrides, blockTag, requireCanonical, stateOverride } = parameters;
-    const contracts2 = parameters.contracts;
+    const contracts = parameters.contracts;
     const { batchSize = parameters.batchSize ?? 1024, deployless = parameters.deployless ?? false } = typeof client.batch?.multicall === "object" ? client.batch.multicall : {};
     const multicallAddress = (() => {
       if (parameters.multicallAddress)
@@ -16107,8 +15679,8 @@ ${prettyStateOverride(stateOverride)}`;
     const chunkedCalls = [[]];
     let currentChunk = 0;
     let currentChunkSize = 0;
-    for (let i = 0; i < contracts2.length; i++) {
-      const { abi: abi3, address, args, functionName } = contracts2[i];
+    for (let i = 0; i < contracts.length; i++) {
+      const { abi: abi3, address, args, functionName } = contracts[i];
       try {
         const callData = encodeFunctionData({ abi: abi3, args, functionName });
         currentChunkSize += (callData.length - 2) / 2;
@@ -16184,7 +15756,7 @@ ${prettyStateOverride(stateOverride)}`;
       for (let j = 0; j < aggregate3Result.length; j++) {
         const { returnData, success } = aggregate3Result[j];
         const { callData } = chunkedCalls[i][j];
-        const { abi: abi3, address, functionName, args } = contracts2[results.length];
+        const { abi: abi3, address, functionName, args } = contracts[results.length];
         try {
           if (callData === "0x")
             throw new AbiDecodingZeroDataError();
@@ -16211,7 +15783,7 @@ ${prettyStateOverride(stateOverride)}`;
         }
       }
     }
-    if (results.length !== contracts2.length)
+    if (results.length !== contracts.length)
       throw new BaseError2("multicall results mismatch");
     return results;
   }
@@ -18350,11 +17922,46 @@ ${prettyStateOverride(stateOverride)}`;
     }
   });
 
+  // node_modules/viem/_esm/utils/signature/parseSignature.js
+  function parseSignature2(signatureHex) {
+    const { r, s } = secp256k1.Signature.fromCompact(signatureHex.slice(2, 130));
+    const yParityOrV = Number(`0x${signatureHex.slice(130)}`);
+    const [v, yParity] = (() => {
+      if (yParityOrV === 0 || yParityOrV === 1)
+        return [void 0, yParityOrV];
+      if (yParityOrV === 27)
+        return [BigInt(yParityOrV), 0];
+      if (yParityOrV === 28)
+        return [BigInt(yParityOrV), 1];
+      throw new Error("Invalid yParityOrV value");
+    })();
+    if (typeof v !== "undefined")
+      return {
+        r: numberToHex(r, { size: 32 }),
+        s: numberToHex(s, { size: 32 }),
+        v,
+        yParity
+      };
+    return {
+      r: numberToHex(r, { size: 32 }),
+      s: numberToHex(s, { size: 32 }),
+      yParity
+    };
+  }
+  var init_parseSignature = __esm({
+    "node_modules/viem/_esm/utils/signature/parseSignature.js"() {
+      init_secp256k1();
+      init_toHex();
+    }
+  });
+
   // node_modules/viem/_esm/index.js
   var init_esm = __esm({
     "node_modules/viem/_esm/index.js"() {
       init_createPublicClient();
       init_http2();
+      init_defineChain();
+      init_parseSignature();
     }
   });
 
@@ -18389,380 +17996,10 @@ ${prettyStateOverride(stateOverride)}`;
     }
   });
 
-  // node_modules/viem/_esm/accounts/utils/sign.js
-  async function sign({ hash: hash3, privateKey, to = "object" }) {
-    const { r, s, recovery } = secp256k1.sign(hash3.slice(2), privateKey.slice(2), {
-      lowS: true,
-      extraEntropy: isHex(extraEntropy, { strict: false }) ? hexToBytes(extraEntropy) : extraEntropy
-    });
-    const signature = {
-      r: numberToHex(r, { size: 32 }),
-      s: numberToHex(s, { size: 32 }),
-      v: recovery ? 28n : 27n,
-      yParity: recovery
-    };
-    return (() => {
-      if (to === "bytes" || to === "hex")
-        return serializeSignature({ ...signature, to });
-      return signature;
-    })();
-  }
-  var extraEntropy;
-  var init_sign = __esm({
-    "node_modules/viem/_esm/accounts/utils/sign.js"() {
-      init_secp256k1();
-      init_isHex();
-      init_toBytes();
-      init_toHex();
-      init_serializeSignature();
-      extraEntropy = false;
-    }
-  });
-
-  // node_modules/viem/_esm/accounts/utils/signAuthorization.js
-  async function signAuthorization(parameters) {
-    const { chainId, nonce, privateKey, to = "object" } = parameters;
-    const address = parameters.contractAddress ?? parameters.address;
-    const signature = await sign({
-      hash: hashAuthorization({ address, chainId, nonce }),
-      privateKey,
-      to
-    });
-    if (to === "object")
-      return {
-        address,
-        chainId,
-        nonce,
-        ...signature
-      };
-    return signature;
-  }
-  var init_signAuthorization = __esm({
-    "node_modules/viem/_esm/accounts/utils/signAuthorization.js"() {
-      init_hashAuthorization();
-      init_sign();
-    }
-  });
-
-  // node_modules/viem/_esm/accounts/utils/signMessage.js
-  async function signMessage({ message, privateKey }) {
-    return await sign({ hash: hashMessage(message), privateKey, to: "hex" });
-  }
-  var init_signMessage = __esm({
-    "node_modules/viem/_esm/accounts/utils/signMessage.js"() {
-      init_hashMessage();
-      init_sign();
-    }
-  });
-
-  // node_modules/viem/_esm/accounts/utils/signTransaction.js
-  async function signTransaction(parameters) {
-    const { privateKey, transaction, serializer = serializeTransaction } = parameters;
-    const signableTransaction = (() => {
-      if (transaction.type === "eip4844")
-        return {
-          ...transaction,
-          sidecars: false
-        };
-      return transaction;
-    })();
-    const signature = await sign({
-      hash: keccak256(await serializer(signableTransaction)),
-      privateKey
-    });
-    return await serializer(transaction, signature);
-  }
-  var init_signTransaction = __esm({
-    "node_modules/viem/_esm/accounts/utils/signTransaction.js"() {
-      init_keccak256();
-      init_serializeTransaction();
-      init_sign();
-    }
-  });
-
-  // node_modules/viem/_esm/accounts/utils/signTypedData.js
-  async function signTypedData(parameters) {
-    const { privateKey, ...typedData } = parameters;
-    return await sign({
-      hash: hashTypedData(typedData),
-      privateKey,
-      to: "hex"
-    });
-  }
-  var init_signTypedData = __esm({
-    "node_modules/viem/_esm/accounts/utils/signTypedData.js"() {
-      init_hashTypedData();
-      init_sign();
-    }
-  });
-
-  // node_modules/viem/_esm/accounts/privateKeyToAccount.js
-  function privateKeyToAccount(privateKey, options = {}) {
-    const { nonceManager: nonceManager2 } = options;
-    const publicKey = toHex(secp256k1.getPublicKey(privateKey.slice(2), false));
-    const address = publicKeyToAddress(publicKey);
-    const account = toAccount({
-      address,
-      nonceManager: nonceManager2,
-      async sign({ hash: hash3 }) {
-        return sign({ hash: hash3, privateKey, to: "hex" });
-      },
-      async signAuthorization(authorization) {
-        return signAuthorization({ ...authorization, privateKey });
-      },
-      async signMessage({ message }) {
-        return signMessage({ message, privateKey });
-      },
-      async signTransaction(transaction, { serializer } = {}) {
-        return signTransaction({ privateKey, transaction, serializer });
-      },
-      async signTypedData(typedData) {
-        return signTypedData({ ...typedData, privateKey });
-      }
-    });
-    return {
-      ...account,
-      publicKey,
-      source: "privateKey"
-    };
-  }
-  var init_privateKeyToAccount = __esm({
-    "node_modules/viem/_esm/accounts/privateKeyToAccount.js"() {
-      init_secp256k1();
-      init_toHex();
-      init_toAccount();
-      init_publicKeyToAddress();
-      init_sign();
-      init_signAuthorization();
-      init_signMessage();
-      init_signTransaction();
-      init_signTypedData();
-    }
-  });
-
   // node_modules/viem/_esm/accounts/index.js
   var init_accounts = __esm({
     "node_modules/viem/_esm/accounts/index.js"() {
-      init_privateKeyToAccount();
-    }
-  });
-
-  // node_modules/viem/_esm/op-stack/contracts.js
-  var contracts;
-  var init_contracts2 = __esm({
-    "node_modules/viem/_esm/op-stack/contracts.js"() {
-      contracts = {
-        gasPriceOracle: { address: "0x420000000000000000000000000000000000000F" },
-        l1Block: { address: "0x4200000000000000000000000000000000000015" },
-        l2CrossDomainMessenger: {
-          address: "0x4200000000000000000000000000000000000007"
-        },
-        l2Erc721Bridge: { address: "0x4200000000000000000000000000000000000014" },
-        l2StandardBridge: { address: "0x4200000000000000000000000000000000000010" },
-        l2ToL1MessagePasser: {
-          address: "0x4200000000000000000000000000000000000016"
-        }
-      };
-    }
-  });
-
-  // node_modules/viem/_esm/op-stack/formatters.js
-  var formatters;
-  var init_formatters = __esm({
-    "node_modules/viem/_esm/op-stack/formatters.js"() {
-      init_fromHex();
-      init_block2();
-      init_transaction2();
-      init_transactionReceipt();
-      formatters = {
-        block: /* @__PURE__ */ defineBlock({
-          format(args) {
-            const transactions = args.transactions?.map((transaction) => {
-              if (typeof transaction === "string")
-                return transaction;
-              const formatted = formatTransaction(transaction);
-              if (formatted.typeHex === "0x7e") {
-                formatted.isSystemTx = transaction.isSystemTx;
-                formatted.mint = transaction.mint ? hexToBigInt(transaction.mint) : void 0;
-                formatted.sourceHash = transaction.sourceHash;
-                formatted.type = "deposit";
-              }
-              return formatted;
-            });
-            return {
-              transactions,
-              stateRoot: args.stateRoot
-            };
-          }
-        }),
-        transaction: /* @__PURE__ */ defineTransaction({
-          format(args) {
-            const transaction = {};
-            if (args.type === "0x7e") {
-              transaction.isSystemTx = args.isSystemTx;
-              transaction.mint = args.mint ? hexToBigInt(args.mint) : void 0;
-              transaction.sourceHash = args.sourceHash;
-              transaction.type = "deposit";
-            }
-            return transaction;
-          }
-        }),
-        transactionReceipt: /* @__PURE__ */ defineTransactionReceipt({
-          format(args) {
-            return {
-              l1GasPrice: args.l1GasPrice ? hexToBigInt(args.l1GasPrice) : null,
-              l1GasUsed: args.l1GasUsed ? hexToBigInt(args.l1GasUsed) : null,
-              l1Fee: args.l1Fee ? hexToBigInt(args.l1Fee) : null,
-              l1FeeScalar: args.l1FeeScalar ? Number(args.l1FeeScalar) : null
-            };
-          }
-        })
-      };
-    }
-  });
-
-  // node_modules/viem/_esm/op-stack/serializers.js
-  function serializeTransaction2(transaction, signature) {
-    if (isDeposit(transaction))
-      return serializeTransactionDeposit(transaction);
-    return serializeTransaction(transaction, signature);
-  }
-  function serializeTransactionDeposit(transaction) {
-    assertTransactionDeposit(transaction);
-    const { sourceHash, data, from: from14, gas, isSystemTx, mint, to, value } = transaction;
-    const serializedTransaction = [
-      sourceHash,
-      from14,
-      to ?? "0x",
-      mint ? toHex(mint) : "0x",
-      value ? toHex(value) : "0x",
-      gas ? toHex(gas) : "0x",
-      isSystemTx ? "0x1" : "0x",
-      data ?? "0x"
-    ];
-    return concatHex([
-      "0x7e",
-      toRlp(serializedTransaction)
-    ]);
-  }
-  function isDeposit(transaction) {
-    if (transaction.type === "deposit")
-      return true;
-    if (typeof transaction.sourceHash !== "undefined")
-      return true;
-    return false;
-  }
-  function assertTransactionDeposit(transaction) {
-    const { from: from14, to } = transaction;
-    if (from14 && !isAddress(from14))
-      throw new InvalidAddressError({ address: from14 });
-    if (to && !isAddress(to))
-      throw new InvalidAddressError({ address: to });
-  }
-  var serializers;
-  var init_serializers = __esm({
-    "node_modules/viem/_esm/op-stack/serializers.js"() {
-      init_address();
-      init_isAddress();
-      init_concat();
-      init_toHex();
-      init_toRlp();
-      init_serializeTransaction();
-      serializers = {
-        transaction: serializeTransaction2
-      };
-    }
-  });
-
-  // node_modules/viem/_esm/op-stack/chainConfig.js
-  var chainConfig;
-  var init_chainConfig = __esm({
-    "node_modules/viem/_esm/op-stack/chainConfig.js"() {
-      init_contracts2();
-      init_formatters();
-      init_serializers();
-      chainConfig = {
-        blockTime: 2e3,
-        contracts,
-        formatters,
-        serializers
-      };
-    }
-  });
-
-  // node_modules/viem/_esm/chains/definitions/baseSepolia.js
-  var sourceId, baseSepolia, baseSepoliaPreconf;
-  var init_baseSepolia = __esm({
-    "node_modules/viem/_esm/chains/definitions/baseSepolia.js"() {
-      init_chainConfig();
-      init_defineChain();
-      sourceId = 11155111;
-      baseSepolia = /* @__PURE__ */ defineChain({
-        ...chainConfig,
-        id: 84532,
-        network: "base-sepolia",
-        name: "Base Sepolia",
-        nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: {
-          default: {
-            http: ["https://sepolia.base.org"]
-          }
-        },
-        blockExplorers: {
-          default: {
-            name: "Basescan",
-            url: "https://sepolia.basescan.org",
-            apiUrl: "https://api-sepolia.basescan.org/api"
-          }
-        },
-        contracts: {
-          ...chainConfig.contracts,
-          disputeGameFactory: {
-            [sourceId]: {
-              address: "0xd6E6dBf4F7EA0ac412fD8b65ED297e64BB7a06E1"
-            }
-          },
-          l2OutputOracle: {
-            [sourceId]: {
-              address: "0x84457ca9D0163FbC4bbfe4Dfbb20ba46e48DF254"
-            }
-          },
-          portal: {
-            [sourceId]: {
-              address: "0x49f53e41452c74589e85ca1677426ba426459e85",
-              blockCreated: 4446677
-            }
-          },
-          l1StandardBridge: {
-            [sourceId]: {
-              address: "0xfd0Bf71F60660E2f608ed56e1659C450eB113120",
-              blockCreated: 4446677
-            }
-          },
-          multicall3: {
-            address: "0xca11bde05977b3631167028862be2a173976ca11",
-            blockCreated: 1059647
-          }
-        },
-        testnet: true,
-        sourceId
-      });
-      baseSepoliaPreconf = /* @__PURE__ */ defineChain({
-        ...baseSepolia,
-        experimental_preconfirmationTime: 200,
-        rpcUrls: {
-          default: {
-            http: ["https://sepolia-preconf.base.org"]
-          }
-        }
-      });
-    }
-  });
-
-  // node_modules/viem/_esm/chains/index.js
-  var init_chains = __esm({
-    "node_modules/viem/_esm/chains/index.js"() {
-      init_baseSepolia();
+      init_toAccount();
     }
   });
 
@@ -22522,33 +21759,86 @@ ${prettyStateOverride(stateOverride)}`;
   var require_entry = __commonJS({
     "entry.js"() {
       init_esm();
+      init_utils6();
       init_accounts();
-      init_chains();
       init_account_abstraction();
-      var IMPLEMENTATION = "0xe6Cae83BdE06E4c305530e199D7217f42808555B";
+      var CHAINS = {
+        84532: { name: "Base Sepolia", nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: ["https://sepolia.base.org"] } } },
+        8453: { name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: ["https://mainnet.base.org"] } } }
+      };
+      var DEFAULT_IMPLEMENTATION = "0xe6Cae83BdE06E4c305530e199D7217f42808555B";
+      function buildChain(chainId, rpcUrl) {
+        const known = CHAINS[chainId];
+        const http2 = rpcUrl ? [rpcUrl] : known?.rpcUrls.default.http ?? [];
+        return defineChain({
+          id: chainId,
+          name: known?.name ?? `Chain ${chainId}`,
+          nativeCurrency: known?.nativeCurrency ?? { name: "Ether", symbol: "ETH", decimals: 18 },
+          rpcUrls: { default: { http: http2 } }
+        });
+      }
+      async function signDigest(hash3) {
+        const wallet = window.openfort.embeddedWalletInstance;
+        const sig = await wallet.signMessage(hash3, { hashMessage: false, arrayifyMessage: false });
+        return sig.startsWith("0x") ? sig : "0x" + sig;
+      }
+      function embeddedOwner(address) {
+        return toAccount({
+          address,
+          async sign({ hash: hash3 }) {
+            return signDigest(hash3);
+          },
+          async signMessage({ message }) {
+            const wallet = window.openfort.embeddedWalletInstance;
+            const value = typeof message === "object" && message !== null && "raw" in message ? message.raw : message;
+            return wallet.signMessage(value);
+          },
+          async signTypedData({ domain, types: types2, message }) {
+            return window.openfort.embeddedWalletInstance.signTypedData(domain, types2, message);
+          },
+          async signAuthorization(authorization) {
+            const { chainId, nonce, contractAddress, address: authAddress } = authorization;
+            const target = contractAddress ?? authAddress;
+            const hash3 = hashAuthorization({ chainId, nonce, address: target });
+            const { r, s, yParity } = parseSignature2(await signDigest(hash3));
+            return { address: target, chainId, nonce, r, s, yParity, v: yParity === 0 ? 27n : 28n };
+          },
+          async signTransaction() {
+            throw new Error("signTransaction is not supported by the embedded EIP-7702 signer");
+          }
+        });
+      }
       window.__ofSend7702 = async function(args) {
-        const { to, data, value, policyId, publishableKey } = args;
-        const chain = baseSepolia;
-        const rpc = `https://api.openfort.io/rpc/${chain.id}`;
-        let pk = await window.openfort.embeddedWalletInstance.exportPrivateKey();
-        if (pk && typeof pk === "object") pk = pk.privateKey ?? pk.key ?? pk.value ?? "";
-        pk = String(pk).trim();
-        if (!pk.startsWith("0x")) pk = "0x" + pk;
-        const owner = privateKeyToAccount(pk);
+        const {
+          to,
+          data,
+          value,
+          policyId,
+          publishableKey,
+          chainId = 84532,
+          implementationAddress = DEFAULT_IMPLEMENTATION,
+          rpcUrl
+        } = args;
+        const chain = buildChain(Number(chainId), rpcUrl);
+        const bundlerRpc = `https://api.openfort.io/rpc/${chain.id}`;
+        const stored = await window.openfort.embeddedWalletInstance.get();
+        const ownerAddress = stored?.address;
+        if (!ownerAddress) throw new Error("No embedded wallet account; configure the embedded wallet first");
+        const owner = embeddedOwner(ownerAddress);
         const publicClient = createPublicClient({ chain, transport: http() });
-        const account = await toSimple7702SmartAccount({ client: publicClient, owner });
+        const account = await toSimple7702SmartAccount({ client: publicClient, owner, implementation: implementationAddress });
         const headers = { Authorization: "Bearer " + publishableKey };
-        const paymaster = createPaymasterClient({ transport: http(rpc, { fetchOptions: { headers } }) });
+        const paymaster = createPaymasterClient({ transport: http(bundlerRpc, { fetchOptions: { headers } }) });
         const bundler = createBundlerClient({
           account,
           paymaster,
           client: publicClient,
-          transport: http(rpc, { fetchOptions: { headers } })
+          transport: http(bundlerRpc, { fetchOptions: { headers } })
         });
         const authorization = await owner.signAuthorization({
-          contractAddress: IMPLEMENTATION,
+          contractAddress: implementationAddress,
           chainId: chain.id,
-          nonce: await publicClient.getTransactionCount({ address: owner.address })
+          nonce: await publicClient.getTransactionCount({ address: ownerAddress })
         });
         const hash3 = await bundler.sendUserOperation({
           calls: [{ to, data: data || "0x", value: BigInt(value || 0) }],

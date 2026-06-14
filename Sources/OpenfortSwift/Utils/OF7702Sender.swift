@@ -4,35 +4,48 @@ import WebKit
 public extension OFSDK {
     /// Sends a **gasless EIP-7702 transaction** from the embedded wallet's EOA, sponsored by
     /// `policy`. A bundled viem flow inside the SDK WebView signs the one-time 7702 authorization
-    /// (using a local account derived from the embedded wallet's exported key, which never leaves
-    /// the WebView) and submits the user operation via Openfort's bundler + paymaster. Returns the
-    /// transaction hash.
+    /// and the user operation through the embedded signer — the EOA private key never leaves
+    /// Openfort's secure signer — and submits the user operation via Openfort's bundler + paymaster.
+    /// Returns the transaction hash.
     ///
     /// Configure the wallet as `.eoa` for this flow — the delegation is layered on at send time.
     ///
-    /// - Note: This relies on `exportPrivateKey` inside the WebView. A first-class
-    ///   `signAuthorization` on the embedded signer would avoid exporting the key; see the SDK
-    ///   roadmap.
+    /// - Parameters:
+    ///   - to: Destination address of the call.
+    ///   - data: Calldata (default `"0x"`).
+    ///   - value: Wei value as a hex or decimal string (default `"0x0"`).
+    ///   - policy: Sponsorship policy id passed to the paymaster.
+    ///   - chainId: Target chain (default Base Sepolia, `84532`). Base mainnet (`8453`) is also
+    ///     known; any other id is built dynamically and requires `rpcUrl`.
+    ///   - implementationAddress: Optional override for the Simple7702Account implementation the
+    ///     authorization delegates to. Defaults to viem's bundled implementation.
+    ///   - rpcUrl: Optional public RPC override for the chain (required for unknown chain ids).
     @MainActor
     @discardableResult
     func sendDelegatedTransaction(
         to: String,
         data: String = "0x",
         value: String = "0x0",
-        policy: String
+        policy: String,
+        chainId: Int = 84532,
+        implementationAddress: String? = nil,
+        rpcUrl: String? = nil
     ) async throws -> String {
         guard let webView else { throw OFError.notReady("SDK WebView is unavailable.") }
         guard let config = OFConfig.loadFromMainBundle() else {
             throw OFError.missingConfiguration("OFConfig.plist is missing or invalid.")
         }
 
-        let args: [String: Any] = [
+        var args: [String: Any] = [
             "to": to,
             "data": data,
             "value": value,
             "policyId": policy,
             "publishableKey": config.openfortPublishableKey,
+            "chainId": chainId,
         ]
+        if let implementationAddress { args["implementationAddress"] = implementationAddress }
+        if let rpcUrl { args["rpcUrl"] = rpcUrl }
         guard let argsData = try? JSONSerialization.data(withJSONObject: args),
               let argsJSON = String(data: argsData, encoding: .utf8) else {
             throw OFError.encodingFailed
