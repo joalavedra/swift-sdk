@@ -267,7 +267,41 @@ let result = try await provider?.request(
 ```
 
 > The callback-based `provider.send(request:response:)` (using Web3.swift `RPCRequest` /
-> `Web3Response`) remains available for advanced use.
+> `Web3Response`) remains available for advanced use. It now routes through the same
+> `request(method:params:)` path, so both APIs reach the provider identically.
+
+### Token helpers & on-chain utilities
+
+`OFERC20` and `OFEVM` are dependency-free helpers (plain `URLSession` JSON-RPC, no Web3.swift) for
+reading token state and waiting on transactions. Use any public RPC URL for the target chain.
+
+```swift
+let rpc = URL(string: "https://mainnet.base.org")!
+
+// Read a balance and build transfer calldata
+let raw = try await OFERC20.balance(token: usdc, owner: wallet, rpcURL: rpc)
+let calldata = OFERC20.transfer(to: recipient, amount: OFERC20.baseUnits(1.5, decimals: 6))
+
+// Transfer history (incoming + outgoing) for an owner.
+// eth_getLogs is chunked because public Base RPC caps each query at 2000 blocks.
+let transfers = try await OFERC20.transferHistory(
+    token: usdc, owner: wallet, rpcURL: rpc, blocks: 24_000, chunk: 2_000
+)
+for t in transfers {
+    print(t.isOutgoing ? "sent" : "received", t.value, "in", t.hash)
+}
+
+// Wait for a plain transaction to be mined (returns false on timeout)
+let mined = try await OFEVM.waitForReceipt(txHash: txHash, rpcURL: rpc, timeout: 60)
+
+// Wait for an ERC-4337 user operation via Openfort's bundler
+let opMined = try await OFEVM.waitForUserOperationReceipt(
+    userOpHash: userOpHash, chainId: 8453, publishableKey: "pk_...", timeout: 60
+)
+```
+
+`OFTokenTransfer` exposes `hash`, `from`, `to`, `value` (raw base units as a `String`),
+`blockNumber`, and `isOutgoing` (relative to the queried `owner`).
 
 ### SIWE (Sign-In with Ethereum)
 

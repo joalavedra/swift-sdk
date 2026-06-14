@@ -35,59 +35,44 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
 
     // MARK: - Web3Provider requirement
 
+    /// `Web3Provider` conformance. Forwards the JSON-RPC `request` to the page provider and maps the
+    /// result into `Web3Response<Result>`.
+    ///
+    /// This delegates to the async ``request(method:params:)`` poll rather than driving the WebView
+    /// itself. `window.openfort` is injected into the page's default world, which the named content
+    /// worlds used by `callAsyncJavaScript` can't see — only the `evaluateJavaScript`-based poll in
+    /// `request` reaches it reliably. Routing `send` through that one verified path keeps both APIs
+    /// hitting the provider identically. The poll returns a `String?` (JSON-encoded for object and
+    /// array results), which we decode into `Result` via ``decodeResultString(_:)``.
     @MainActor public func send<Params, Result: Sendable>(
         request: RPCRequest<Params>,
         response: @escaping Web3ResponseCompletion<Result>
     ) {
-        guard let webView else {
+        guard webView != nil else {
             callbackQueue.async { response(Web3Response<Result>(error: Web3Response<Result>.Error.connectionFailed(nil))) }
             return
         }
 
-        // 1) Build JSON for `params`
-        let paramsJSONString = makeParamsJSONString(request.params) ?? "[]"
-
-        // 2) Build the async function body. We must use `callAsyncJavaScript`, which awaits the
-        //    returned promise — `evaluateJavaScript` does not, and a returned Promise fails to
-        //    bridge ("WKError code 5: result of an unsupported type"), breaking every request.
-        let body = """
-        if (!window.__ofProvider) {
-          if (!window.openfort || !window.openfort.embeddedWalletInstance) {
-            throw new Error('Openfort embedded wallet not available in page');
-          }
-          window.__ofProvider = await window.openfort.embeddedWalletInstance.getEthereumProvider(\(getProviderParamsJSArgument()));
-        }
-        return await window.__ofProvider.request({
-          method: "\(request.method)",
-          params: \(paramsJSONString)
-        });
-        """
-
-        // 3) Evaluate and map back to Web3Response<Result>
-        webView.callAsyncJavaScript(body, arguments: [:], in: nil, in: .page, completionHandler: { jsResult in
-            switch jsResult {
-            case .failure(let jsError):
-                let wrapped = NSError(
-                    domain: "OpenfortEIP1193Web3Provider", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: Self.jsErrorMessage(jsError)]
-                )
-                self.callbackQueue.async {
-                    response(Web3Response<Result>(error: Web3Response<Result>.Error.requestFailed(wrapped)))
-                }
-            case .success(let value):
-                if let decoded: Result = self.decodeResult(value) {
-                    self.callbackQueue.async {
-                        response(Web3Response<Result>(status: .success(decoded)))
-                    }
+        let params = makeParamsArray(request.params)
+        let method = request.method
+        Task { @MainActor in
+            do {
+                let raw = try await self.request(method: method, params: params)
+                if let decoded: Result = self.decodeResultString(raw) {
+                    self.callbackQueue.async { response(Web3Response<Result>(status: .success(decoded))) }
                 } else {
                     self.callbackQueue.async {
                         response(Web3Response<Result>(error: Web3Response<Result>.Error.decodingError(nil)))
                     }
                 }
+            } catch {
+                self.callbackQueue.async {
+                    response(Web3Response<Result>(error: Web3Response<Result>.Error.requestFailed(error)))
+                }
             }
-        })
+        }
     }
-    
+
     // MARK: - Async request (Web3.swift-free)
 
     /// EIP-1193 `request`, async and free of Web3.swift types. Forwards `{ method, params }` to the
@@ -170,16 +155,6 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
         }
     }
 
-    /// Extracts the underlying JavaScript exception message from a `callAsyncJavaScript` error,
-    /// which otherwise surfaces only as a generic "A JavaScript exception occurred".
-    static func jsErrorMessage(_ error: Error) -> String {
-        let nsError = error as NSError
-        if let message = nsError.userInfo["WKJavaScriptExceptionMessage"] as? String, !message.isEmpty {
-            return message
-        }
-        return nsError.localizedDescription
-    }
-
     /// Coerces a JS result value into a `String` (passing strings through, JSON-encoding objects).
     private static func stringify(_ any: Any?) -> String? {
         guard let any, !(any is NSNull) else { return nil }
@@ -206,98 +181,58 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
 
     // MARK: - Encoding helpers
 
-    /// Turns generic `Params?` into a JSON string literal suitable to embed into JS.
-    private func makeParamsJSONString<Params>(_ params: Params?) -> String? {
-        guard let params else { return "[]" }
-
-        // First, try direct JSON encoding (works for Encodable arrays/dicts/primitives).
-        if let encodable = params as? Encodable {
-            do {
-                let data = try encodeEncodableToJSON(encodable)
-                return String(data: data, encoding: .utf8)
-            } catch {
-                // fallthrough
-            }
-        }
-
-        // Next, try to convert common Foundation shapes
-        if JSONSerialization.isValidJSONObject(params) {
-            if let data = try? JSONSerialization.data(withJSONObject: params, options: []) {
-                return String(data: data, encoding: .utf8)
-            }
-        }
-
-        // As a last resort: wrap single items into an array
-        if let data = try? JSONSerialization.data(withJSONObject: [params], options: []) {
-            return String(data: data, encoding: .utf8)
-        }
-
-        return nil
-    }
-
-    private func encodeEncodableToJSON(_ value: Encodable) throws -> Data {
-        struct AnyEncodable: Encodable {
-            let wrapped: Encodable
-            func encode(to encoder: Encoder) throws { try wrapped.encode(to: encoder) }
-        }
-        return try JSONEncoder().encode(AnyEncodable(wrapped: value))
+    /// Normalizes generic `Codable` RPC `Params` into a JSON-serializable `[Any]` for the poll.
+    ///
+    /// EIP-1193 `params` is always an array. We JSON-encode the request's `Params` and re-parse it:
+    /// an encoded array passes through; a single encoded value (or non-array) is wrapped in a
+    /// one-element array. A `nil` or unencodable `params` yields an empty array.
+    private func makeParamsArray<Params>(_ params: Params?) -> [Any] {
+        guard let params, let encodable = params as? Encodable,
+              let data = try? JSONEncoder().encode(AnyEncodable(encodable)),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        else { return [] }
+        if let array = parsed as? [Any] { return array }
+        return [parsed]
     }
 
     // MARK: - Decoding helpers
 
-    /// Attempts to coerce the JS `result` into `Result`.
-    private func decodeResult<Result: Codable>(_ any: Any?) -> Result? {
-        guard let any else { return nil }
-
-        // Fast-path for common primitives
-        if Result.self == String.self, let s = any as? String { return s as? Result }
-        if Result.self == Bool.self,   let b = any as? Bool   { return b as? Result }
-        if Result.self == Int.self,    let i = any as? Int    { return i as? Result }
-        if Result.self == Double.self, let d = any as? Double { return d as? Result }
-
-        // If the result is already the right type (rare), just cast
-        if let casted = any as? Result {
-            return casted
-        }
-
-        // Otherwise, try JSON round‑trip:
-        // - If it's JSON-serializable (dict/array/primitive), serialize then decode
-        if JSONSerialization.isValidJSONObject(any),
-           let data = try? JSONSerialization.data(withJSONObject: any, options: []) {
-            if let decoded = try? JSONDecoder().decode(Result.self, from: data) {
-                return decoded
-            }
-        }
-
-        // If it’s a primitive (e.g., string) but Result is Codable (e.g., String),
-        // encode that primitive alone to JSON data and decode it into Result.
-        if let s = any as? String, let data = try? JSONEncoder().encode(s),
+    /// Decodes the `String?` returned by ``request(method:params:)`` into a `Codable` `Result`.
+    ///
+    /// The poll returns hex/decimal scalars verbatim and JSON-encodes object/array results. We try,
+    /// in order: a direct `String` cast, a JSON decode of the string as-is (handles objects, arrays,
+    /// and quoted scalars), and finally a decode of the string re-wrapped as a JSON string literal
+    /// (handles a bare `Result == String` such as a transaction hash).
+    private func decodeResultString<Result: Codable>(_ raw: String?) -> Result? {
+        guard let raw else { return nil }
+        if Result.self == String.self, let typed = raw as? Result { return typed }
+        if let data = raw.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(Result.self, from: data) {
             return decoded
         }
-        if let b = any as? Bool, let data = try? JSONEncoder().encode(b),
+        if let data = try? JSONEncoder().encode(raw),
            let decoded = try? JSONDecoder().decode(Result.self, from: data) {
             return decoded
         }
-        if let n = any as? NSNumber,
-           let data = try? JSONEncoder().encode(n.stringValue),
-           let decoded = try? JSONDecoder().decode(Result.self, from: data) {
-            return decoded
-        }
-
         return nil
     }
 }
 
+/// Type-erasing `Encodable` wrapper so a heterogeneous `Encodable` value can be JSON-encoded.
+private struct AnyEncodable: Encodable {
+    private let encode: (Encoder) throws -> Void
+    init(_ wrapped: Encodable) { encode = wrapped.encode }
+    func encode(to encoder: Encoder) throws { try encode(encoder) }
+}
+
+/// Errors raised by the Openfort EIP-1193 provider bridge.
 public enum OFProviderError: Error, LocalizedError {
     case connectionFailed
-    case emptyResponse
     case requestFailed(String)
 
     public var errorDescription: String? {
         switch self {
         case .connectionFailed: return "The Openfort provider WebView is unavailable."
-        case .emptyResponse:    return "The Openfort provider returned no response."
         case .requestFailed(let message): return message
         }
     }
