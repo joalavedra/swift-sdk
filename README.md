@@ -240,8 +240,8 @@ let accounts: [OFEmbeddedAccount]? = try await OFSDK.shared.list()
 ### Ethereum Provider & Transactions
 
 Get an EIP-1193 provider, optionally with a gas-sponsorship policy. The provider exposes an
-`async` `request(method:params:)` that returns the result as a `String` (e.g. a transaction hash)
-— no need to construct `RPCRequest` or depend on Web3.swift:
+`async` `request(method:params:)` that returns the result as a `String` (e.g. a transaction hash).
+The SDK has no third-party Web3 dependency — `request` is the single JSON-RPC entry point:
 
 ```swift
 let provider = try await OFSDK.shared.getEthereumProvider(
@@ -266,14 +266,10 @@ let result = try await provider?.request(
 )
 ```
 
-> The callback-based `provider.send(request:response:)` (using Web3.swift `RPCRequest` /
-> `Web3Response`) remains available for advanced use. It now routes through the same
-> `request(method:params:)` path, so both APIs reach the provider identically.
-
 ### Token helpers & on-chain utilities
 
-`OFERC20` and `OFEVM` are dependency-free helpers (plain `URLSession` JSON-RPC, no Web3.swift) for
-reading token state and waiting on transactions. Use any public RPC URL for the target chain.
+`OFERC20` and `OFEVM` are dependency-free helpers (plain `URLSession` JSON-RPC) for reading token
+state and waiting on transactions. Use any public RPC URL for the target chain.
 
 ```swift
 let rpc = URL(string: "https://mainnet.base.org")!

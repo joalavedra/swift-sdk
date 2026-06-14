@@ -7,81 +7,30 @@
 
 import Foundation
 import WebKit
-@preconcurrency import Web3
 
-/// Bridges Openfort’s JS EIP-1193 provider to Boilertalk/Web3.swift's `Web3Provider`.
-/// It forwards JSON-RPC calls through the WKWebView using `provider.request({ method, params })`.
-public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
+/// Bridges Openfort's in-page EIP-1193 provider to Swift. Forwards JSON-RPC calls through the
+/// `WKWebView` to `window.openfort.embeddedWalletInstance.getEthereumProvider().request(...)` and
+/// returns the result — with no third-party Web3 dependency.
+public final class OpenfortEIP1193Web3Provider {
 
-    // MARK: - Web3Provider conformance hooks (not used by this protocol directly, but Web3 may inspect them elsewhere)
-    public typealias Web3ResponseCompletion<Result: Codable> = @Sendable (_ resp: Web3Response<Result>) -> Void
-
-    // MARK: - Internals
     private weak var webView: WKWebView?
-    private let callbackQueue: DispatchQueue
     private let getProviderParams: OFGetEthereumProviderParams?
-    
+
     /// - Parameters:
-    ///   - webView: The `WKWebView` hosting the Openfort page where `openfort.getEthereumProvider()` is available.
-    ///   - getProviderParams: Optional parameters forwarded to `openfort.getEthereumProvider(...)` (e.g., policy, chains, providerInfo, announceProvider). If `nil`, the provider is requested without arguments.
-    ///   - callbackQueue: The dispatch queue on which `Web3Response` callbacks are delivered. Defaults to `.main`.
-    public init(webView: WKWebView,
-                getProviderParams: OFGetEthereumProviderParams? = nil,
-                callbackQueue: DispatchQueue = .main) {
+    ///   - webView: The `WKWebView` hosting the Openfort page where `getEthereumProvider()` is available.
+    ///   - getProviderParams: Optional parameters forwarded to `getEthereumProvider(...)` (e.g. policy,
+    ///     chains, providerInfo, announceProvider). If `nil`, the provider is requested without arguments.
+    public init(webView: WKWebView, getProviderParams: OFGetEthereumProviderParams? = nil) {
         self.webView = webView
         self.getProviderParams = getProviderParams
-        self.callbackQueue = callbackQueue
     }
 
-    // MARK: - Web3Provider requirement
+    // MARK: - Request
 
-    /// `Web3Provider` conformance. Forwards the JSON-RPC `request` to the page provider and maps the
-    /// result into `Web3Response<Result>`.
-    ///
-    /// This delegates to the async ``request(method:params:)`` poll rather than driving the WebView
-    /// itself. `window.openfort` is injected into the page's default world, which the named content
-    /// worlds used by `callAsyncJavaScript` can't see — only the `evaluateJavaScript`-based poll in
-    /// `request` reaches it reliably. Routing `send` through that one verified path keeps both APIs
-    /// hitting the provider identically. The poll returns a `String?` (JSON-encoded for object and
-    /// array results), which we decode into `Result` via ``decodeResultString(_:)``.
-    @MainActor public func send<Params, Result: Sendable>(
-        request: RPCRequest<Params>,
-        response: @escaping Web3ResponseCompletion<Result>
-    ) {
-        guard webView != nil else {
-            callbackQueue.async { response(Web3Response<Result>(error: Web3Response<Result>.Error.connectionFailed(nil))) }
-            return
-        }
-
-        let params = makeParamsArray(request.params)
-        let method = request.method
-        Task { @MainActor in
-            do {
-                let raw = try await self.request(method: method, params: params)
-                if let decoded: Result = self.decodeResultString(raw) {
-                    self.callbackQueue.async { response(Web3Response<Result>(status: .success(decoded))) }
-                } else {
-                    self.callbackQueue.async {
-                        response(Web3Response<Result>(error: Web3Response<Result>.Error.decodingError(nil)))
-                    }
-                }
-            } catch {
-                self.callbackQueue.async {
-                    response(Web3Response<Result>(error: Web3Response<Result>.Error.requestFailed(error)))
-                }
-            }
-        }
-    }
-
-    // MARK: - Async request (Web3.swift-free)
-
-    /// EIP-1193 `request`, async and free of Web3.swift types. Forwards `{ method, params }` to the
-    /// page provider and returns the result as a `String` (e.g. a transaction hash for
-    /// `eth_sendTransaction`, or a hex value for `eth_call` / `eth_chainId`). Object/array results
-    /// are returned as a JSON string. Throws `OFProviderError` on bridge or provider errors.
-    ///
-    /// Use this instead of `send(request:response:)` when you don't want to depend on Boilertalk
-    /// Web3.swift (`RPCRequest` / `Web3Response`) just to make a JSON-RPC call.
+    /// EIP-1193 `request`. Forwards `{ method, params }` to the page provider and returns the result
+    /// as a `String` (e.g. a transaction hash for `eth_sendTransaction`, or a hex value for
+    /// `eth_call` / `eth_chainId`). Object/array results are returned as a JSON string. Throws
+    /// `OFProviderError` on bridge or provider errors.
     @MainActor
     @discardableResult
     public func request(method: String, params: [Any] = []) async throws -> String? {
@@ -169,60 +118,14 @@ public final class OpenfortEIP1193Web3Provider: @preconcurrency Web3Provider {
     }
 
     private func getProviderParamsJSArgument() -> String {
-        guard let p = getProviderParams else { return "undefined" }
+        guard let params = getProviderParams else { return "undefined" }
         do {
-            let data = try JSONEncoder().encode(p)
+            let data = try JSONEncoder().encode(params)
             return String(data: data, encoding: .utf8) ?? "undefined"
         } catch {
             return "undefined"
         }
     }
-
-
-    // MARK: - Encoding helpers
-
-    /// Normalizes generic `Codable` RPC `Params` into a JSON-serializable `[Any]` for the poll.
-    ///
-    /// EIP-1193 `params` is always an array. We JSON-encode the request's `Params` and re-parse it:
-    /// an encoded array passes through; a single encoded value (or non-array) is wrapped in a
-    /// one-element array. A `nil` or unencodable `params` yields an empty array.
-    private func makeParamsArray<Params>(_ params: Params?) -> [Any] {
-        guard let params, let encodable = params as? Encodable,
-              let data = try? JSONEncoder().encode(AnyEncodable(encodable)),
-              let parsed = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-        else { return [] }
-        if let array = parsed as? [Any] { return array }
-        return [parsed]
-    }
-
-    // MARK: - Decoding helpers
-
-    /// Decodes the `String?` returned by ``request(method:params:)`` into a `Codable` `Result`.
-    ///
-    /// The poll returns hex/decimal scalars verbatim and JSON-encodes object/array results. We try,
-    /// in order: a direct `String` cast, a JSON decode of the string as-is (handles objects, arrays,
-    /// and quoted scalars), and finally a decode of the string re-wrapped as a JSON string literal
-    /// (handles a bare `Result == String` such as a transaction hash).
-    private func decodeResultString<Result: Codable>(_ raw: String?) -> Result? {
-        guard let raw else { return nil }
-        if Result.self == String.self, let typed = raw as? Result { return typed }
-        if let data = raw.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode(Result.self, from: data) {
-            return decoded
-        }
-        if let data = try? JSONEncoder().encode(raw),
-           let decoded = try? JSONDecoder().decode(Result.self, from: data) {
-            return decoded
-        }
-        return nil
-    }
-}
-
-/// Type-erasing `Encodable` wrapper so a heterogeneous `Encodable` value can be JSON-encoded.
-private struct AnyEncodable: Encodable {
-    private let encode: (Encoder) throws -> Void
-    init(_ wrapped: Encodable) { encode = wrapped.encode }
-    func encode(to encoder: Encoder) throws { try encode(encoder) }
 }
 
 /// Errors raised by the Openfort EIP-1193 provider bridge.
