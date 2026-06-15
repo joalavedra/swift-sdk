@@ -25,6 +25,47 @@
 
 The easiest way to use embedded wallets, with built-in authentication and payments capabilities in Swift.
 
+## Requirements
+
+Two prerequisites are easy to miss because they only fail at runtime:
+
+- **Keychain access.** The SDK stores all session state in the iOS Keychain. Your app must be
+  able to use it: enable the **Keychain Sharing** capability (or otherwise sign the app with a
+  `keychain-access-groups` entitlement). On the **iOS Simulator**, run a *signed* build — an
+  unsigned target returns `errSecMissingEntitlement` (-34018) and `setupSDK()` will throw
+  `OFError.keychainInaccessible`.
+- **Allowed app origin.** Native apps must have their **bundle identifier** added to the app
+  client in the Openfort dashboard (**Account Management → Configuration → Security**). An empty
+  list denies all requests, and the embedded wallet will fail with *"Failed to establish iFrame
+  connection."* See [Configure allowed native apps](https://www.openfort.io/docs/configuration/native-apps).
+
+## Account types
+
+When you `configure` an embedded wallet you choose an `accountType` (`OFAccountType`) that
+determines its capabilities:
+
+| `accountType` | Gas sponsorship | Batching | Notes |
+|---------------|-----------------|----------|-------|
+| `.eoa` | No | No | A plain externally-owned account. Chain-agnostic; users pay their own gas. |
+| `.smartAccount` | **Yes** | **Yes** | ERC-4337 smart account. Gasless + batching through the embedded provider with no extra setup — recommended for most apps. |
+| `.delegatedAccount` | **Yes** | **Yes** | EIP-7702: the user's EOA is delegated to a smart-account implementation (Calibur), so the wallet keeps a single address. Gasless through the provider — the SDK signs the one-time delegation authorization on the first send automatically. |
+
+A **smart account** is the simplest way to get gasless transactions: set
+`accountType: .smartAccount`, then pass a [gas sponsorship policy](https://www.openfort.io/docs/configuration/gas-sponsorship)
+to the provider and omit `gas`/`gasPrice` (see
+[Ethereum Provider & Transactions](#ethereum-provider--transactions)). It is counterfactual until
+its first transaction deploys it.
+
+```swift
+let account = try await OFSDK.shared.configure(
+    params: OFEmbeddedAccountConfigureParams(
+        chainId: 84532, // Base Sepolia
+        recoveryParams: OFRecoveryParamsDTO(recoveryMethod: .password, password: recoveryPassword),
+        accountType: .smartAccount
+    )
+)
+```
+
 ## Installation
 
 Adding OpenfortSwift to Your Project (Swift Package Manager)
@@ -56,11 +97,11 @@ import OpenfortSwift
 1. Download the [`OFConfig.plist`](./OFConfig.plist) and add it to your Xcode project.
 2. Make sure to select **"Copy items if needed"** when adding the file to your project.
 3. Open the file in Xcode and configure the following keys with your own values:
-   - **backendURL** – Your backend API base URL (optional).
-   - **iframeURL** – URL of your iframe environment (optional).
-   - **openfortPublishableKey** – Your Openfort publishable key.
-   - **shieldPublishableKey** – Your Shield publishable key.
-   - **shieldURL** – Shield service URL (optional).
+   - **openfortPublishableKey** – Your Openfort publishable key (**required**).
+   - **shieldPublishableKey** – Your Shield publishable key (**required**).
+   - **debug** – Enable verbose SDK logging (optional, defaults to `false`).
+   - **backendUrl** / **iframeUrl** / **shieldUrl** – URL overrides (optional; leave empty unless
+     instructed by Openfort). Keys are case-sensitive — note the lowercase `Url`.
 
 **5. Initialize the SDK**
 
@@ -78,10 +119,33 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
 
-        OFSDK.setupSDK()
+        do {
+            try OFSDK.setupSDK()
+        } catch {
+            // Surfaces actionable setup errors, e.g. OFError.keychainInaccessible or
+            // OFError.missingConfiguration. See Requirements above.
+            print("Openfort setup failed: \(error.localizedDescription)")
+        }
 
         return true
     }
+}
+```
+
+**6. Wait until the bridge is ready**
+
+`setupSDK()` returns *before* the embedded WebView bridge has finished loading, so calling SDK
+methods immediately can fail. Await readiness (or observe `.openfortReady`) before your first call:
+
+```swift
+try await OFSDK.shared.waitUntilReady()
+// ...now safe to authenticate, configure the wallet, etc.
+```
+
+```swift
+// Or observe the notification:
+NotificationCenter.default.addObserver(forName: .openfortReady, object: nil, queue: .main) { _ in
+    // bridge ready
 }
 ```
 
@@ -173,6 +237,68 @@ let privateKey: String? = try await OFSDK.shared.exportPrivateKey()
 let accounts: [OFEmbeddedAccount]? = try await OFSDK.shared.list()
 ```
 
+### Ethereum Provider & Transactions
+
+Get an EIP-1193 provider, optionally with a gas-sponsorship policy. The provider exposes an
+`async` `request(method:params:)` that returns the result as a `String` (e.g. a transaction hash).
+The SDK has no third-party Web3 dependency — `request` is the single JSON-RPC entry point:
+
+```swift
+let provider = try await OFSDK.shared.getEthereumProvider(
+    params: OFGetEthereumProviderParams(policy: "pol_...") // optional, for gasless tx
+)
+
+// Send a transaction (returns the tx hash)
+let txHash = try await provider?.request(
+    method: "eth_sendTransaction",
+    params: [[
+        "from": fromAddress,
+        "to": toAddress,
+        "value": "0x0",
+        "data": calldata,
+    ]]
+)
+
+// Read-only call (returns hex)
+let result = try await provider?.request(
+    method: "eth_call",
+    params: [["to": tokenAddress, "data": balanceOfCalldata], "latest"]
+)
+```
+
+### Token helpers & on-chain utilities
+
+`OFERC20` and `OFEVM` are dependency-free helpers (plain `URLSession` JSON-RPC) for reading token
+state and waiting on transactions. Use any public RPC URL for the target chain.
+
+```swift
+let rpc = URL(string: "https://mainnet.base.org")!
+
+// Read a balance and build transfer calldata
+let raw = try await OFERC20.balance(token: usdc, owner: wallet, rpcURL: rpc)
+let calldata = OFERC20.transfer(to: recipient, amount: OFERC20.baseUnits(1.5, decimals: 6))
+
+// Transfer history (incoming + outgoing) for an owner.
+// eth_getLogs is chunked because public Base RPC caps each query at 2000 blocks.
+let transfers = try await OFERC20.transferHistory(
+    token: usdc, owner: wallet, rpcURL: rpc, blocks: 24_000, chunk: 2_000
+)
+for t in transfers {
+    print(t.isOutgoing ? "sent" : "received", t.value, "in", t.hash)
+}
+
+// Wait for a plain transaction to be mined (returns false on timeout)
+let mined = try await OFEVM.waitForReceipt(txHash: txHash, rpcURL: rpc, timeout: 60)
+
+// Wait for an ERC-4337 user operation via Openfort's bundler
+let opMined = try await OFEVM.waitForUserOperationReceipt(
+    userOpHash: userOpHash, chainId: 8453, publishableKey: "pk_...", timeout: 60
+)
+```
+
+`OFTokenTransfer` exposes `hash`, `from`, `to`, `value` (raw base units as a `String`),
+`blockNumber`, and `isOutgoing` (relative to the queried `owner`).
+
 ### SIWE (Sign-In with Ethereum)
 
 ```swift
@@ -214,6 +340,17 @@ let response: OFAuthResponse? = try await OFSDK.shared.loginWithSiwe(
 | `OFRecoveryMethod` | `.password`, `.automatic`, `.passkey` |
 | `OFAccountType` | `.eoa`, `.smartAccount` |
 | `OFChainType` | `.evm`, `.svm` |
+
+### Errors
+
+`OFError` conforms to `LocalizedError`, so `error.localizedDescription` is user-readable:
+
+| Case | When |
+|------|------|
+| `.keychainInaccessible(status:)` | The app can't use the Keychain (unsigned simulator build, missing entitlement — see Requirements). |
+| `.missingConfiguration(_:)` | `OFConfig.plist` is missing, unreadable, or missing required keys. |
+| `.notReady(_:)` | `waitUntilReady()` timed out, or the WebView bridge failed to load. |
+| `.encodingFailed` | A request payload could not be encoded. |
 
 ## License
 

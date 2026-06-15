@@ -2,15 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>backendURL</key>
-	<string></string>
-	<key>iframeURL</key>
-	<string></string>
+	<!-- Required -->
 	<key>openfortPublishableKey</key>
 	<string></string>
 	<key>shieldPublishableKey</key>
 	<string></string>
-	<key>shieldURL</key>
+	<!-- Optional: enable verbose SDK logging -->
+	<key>debug</key>
+	<false/>
+	<!-- Optional URL overrides (leave empty unless instructed by Openfort).
+	     Keys are case-sensitive and must match exactly: backendUrl / iframeUrl / shieldUrl. -->
+	<key>backendUrl</key>
+	<string></string>
+	<key>iframeUrl</key>
+	<string></string>
+	<key>shieldUrl</key>
 	<string></string>
 </dict>
 </plist>

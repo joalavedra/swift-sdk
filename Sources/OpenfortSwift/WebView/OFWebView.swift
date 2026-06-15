@@ -52,7 +52,7 @@ internal class OFWebView: WKWebView {
         addScript(named: "openfort", injectionTime: .atDocumentStart)
         addScript(named: "utils", injectionTime: .atDocumentStart)
         addScript(named: "openfort-sync", injectionTime: .atDocumentStart)
-        
+
         let script = OFConfig.openfortSyncScript(provider: provider)
         let userScript = WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
             userContentController.addUserScript(userScript)

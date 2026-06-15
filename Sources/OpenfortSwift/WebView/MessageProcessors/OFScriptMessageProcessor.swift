@@ -12,6 +12,10 @@ import Foundation
 
 internal final class OFScriptMessageProcessor {
 
+    /// Method name pushed by the `__ofWatchEmbeddedState` JS hook whenever an openfort-js
+    /// lifecycle event changes the embedded state. Carries the raw `OFEmbeddedState` Int.
+    internal static let embeddedStateChanged = "embeddedStateChanged"
+
     private let jsonDecoder = JSONDecoder()
     private let storageMessageProcessor = OFStorageMessageProcessor()
 
@@ -85,6 +89,7 @@ internal final class OFScriptMessageProcessor {
             OFMethods.sendSignatureSessionRequest: handlerFor(OFSessionResponse.self),
             OFMethods.getUserInstance: handlerFor(OFUser.self),
             OFMethods.getAccessToken: handlerFor(OFGetAccessTokenResponse.self),
+            OFScriptMessageProcessor.embeddedStateChanged: handlerFor(Int.self),
         ]
     }
 
@@ -128,6 +133,10 @@ internal final class OFScriptMessageProcessor {
                     }
                 }
                 jsonData = try JSONSerialization.data(withJSONObject: dict, options: [])
+            } else if let array = data as? [Any] {
+                // Array responses (e.g. `list()` -> `[OFEmbeddedAccount]`). openfort-js ≥1.3.2
+                // returns a bare array here rather than a wrapper object.
+                jsonData = try JSONSerialization.data(withJSONObject: array, options: [])
             } else if let d = data as? T {
                 object = d
                 postNotification()
