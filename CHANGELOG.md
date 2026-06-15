@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-06-15
+
+Surfaced by dogfooding the SDK to build a Cash App–style wallet.
+
+### Breaking Changes
+
+- **Removed the `Web3.swift` dependency.** This also drops the transitive
+  swift-nio, PromiseKit, CryptoSwift, secp256k1, and BigInt dependencies.
+- **`OpenfortEIP1193Web3Provider` no longer conforms to `Web3Provider`** and no
+  longer exposes `Web3`/`Boilertalk` types. The completion-based
+  `send(request: RPCRequest, response:)` API and the `Web3ResponseCompletion`
+  typealias are removed, replaced by `request(method:params:) async throws -> String?`.
+- `OpenfortEIP1193Web3Provider.init` no longer takes a `callbackQueue`; it now
+  takes an optional `getProviderParams`.
+- `OFConfig`'s `debug` key is now optional (the sample `OFConfig.plist` shipped
+  without it, which previously failed to decode and left the SDK unconfigured).
+
+### New
+
+- **Native EIP-7702 / Calibur gasless sends.** Upgraded the vendored
+  `openfort.js` bundle from 1.1.5 to 1.3.7, so a `.delegatedAccount` gasless send
+  through `provider.request("eth_sendTransaction", policy)` signs the first-send
+  7702 authorization in `sendCallsSync` (no longer reverts `AA24`). Removed the
+  782KB bundled-viem workaround and `OF7702Sender` (net JS −390KB). Rebuildable
+  via `js-src/openfort-entry.js`.
+- `OFERC20` — token balances, `transfer` calldata, and `transferHistory`
+  (chunked `eth_getLogs`) returning `[OFTokenTransfer]` for activity feeds.
+- `OFEVM` — `waitForReceipt` and `waitForUserOperationReceipt` (Openfort bundler)
+  so the UI can settle after a send.
+- `waitUntilReady(timeout:)` plus public `.openfortReady` / `.openfortInitError`
+  notifications. Embedded-wallet readiness is now event-driven (lifecycle events
+  with a bounded backstop) instead of a 1s polling timer.
+
+### Fixes
+
+- `requestEmailOtp` no longer fails with an opaque `INVALID_CONFIGURATION` that
+  masked a keychain error. `OFKeychainHelper.save` returns its `OSStatus` and
+  `setupSDK()` throws a clear `OFError.keychainInaccessible` (e.g. on
+  `errSecMissingEntitlement -34018`).
+- `OFScriptMessageProcessor` decodes bare array responses (`list()` returns an
+  array in openfort-js ≥1.3.2).
+- Adapted to renamed JS SIWE methods (`initSIWE`→`initSiwe`,
+  `authenticateWithSIWE`→`loginWithSiwe`).
+- `OFError` now conforms to `LocalizedError`.
+
 ## [1.0.0] - 2026-02-06
 
 ### Breaking Changes
