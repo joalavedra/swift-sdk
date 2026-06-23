@@ -70,6 +70,14 @@ internal class OFWebView: WKWebView {
         // Configure 'self'
         self.navigationDelegate = delegate
 
+        // Debug builds: allow Safari Web Inspector to attach to this WebView so the embedded
+        // openfort.js console (e.g. embedded-wallet/Shield setup errors) is inspectable.
+        #if DEBUG
+        if #available(iOS 16.4, macOS 13.3, *) {
+            self.isInspectable = true
+        }
+        #endif
+
         // Load the local file URL
         self.loadFileURL(fileUrl, allowingReadAccessTo: fileUrl.deletingLastPathComponent())
     }
