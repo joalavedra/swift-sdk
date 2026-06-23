@@ -10,7 +10,7 @@ import Combine
 import Security
 
 @MainActor
-public final class OFSDK: NSObject, OFOpenfortRootable, OFAuthorizable, OFProxible, OFEmbeddedWalletAccessable, OFUserAccessable {
+public final class OFSDK: NSObject, OFOpenfortRootable, OFAuthorizable, OFProxible, OFEmbeddedWalletAccessable, OFUserAccessable, OFFundable {
     
     public static let shared = OFSDK()
     

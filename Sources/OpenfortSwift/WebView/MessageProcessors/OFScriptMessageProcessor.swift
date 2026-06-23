@@ -89,6 +89,11 @@ internal final class OFScriptMessageProcessor {
             OFMethods.sendSignatureSessionRequest: handlerFor(OFSessionResponse.self),
             OFMethods.getUserInstance: handlerFor(OFUser.self),
             OFMethods.getAccessToken: handlerFor(OFGetAccessTokenResponse.self),
+            OFMethods.fundingCreateSession: handlerFor(OFFundingSession.self),
+            OFMethods.fundingSetPaymentMethod: handlerFor(OFFundingSession.self),
+            OFMethods.fundingGetSession: handlerFor(OFFundingSession.self),
+            OFMethods.fundingPayLink: handlerFor(String.self),
+            OFMethods.fundingChains: handlerFor([OFFundingChain].self),
             OFScriptMessageProcessor.embeddedStateChanged: handlerFor(Int.self),
         ]
     }

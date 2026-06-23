@@ -52,4 +52,11 @@ public enum OFMethods {
     public static let verifyEmail = "verifyEmail"
     public static let verifyEmailOtp = "verifyEmailOtp"
     public static let setRecoveryMethod = "setRecoveryMethod"
+
+    // Funding
+    public static let fundingCreateSession = "fundingCreateSession"
+    public static let fundingSetPaymentMethod = "fundingSetPaymentMethod"
+    public static let fundingGetSession = "fundingGetSession"
+    public static let fundingPayLink = "fundingPayLink"
+    public static let fundingChains = "fundingChains"
 }
