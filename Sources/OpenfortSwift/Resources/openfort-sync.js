@@ -359,3 +359,34 @@ window.getAccessTokenSync = function() {
 window.validateAndRefreshTokenSync = function({ forceRefresh } = {}) {
     handleResult('validateAndRefreshToken', window.openfort.validateAndRefreshToken(forceRefresh));
 };
+
+// Funding (cross-chain deposit) sync methods
+//
+// These drive the public `window.openfort.funding` namespace (openfort-js >= 1.5.0), which
+// authenticates with the project publishable key and needs no logged-in user. The Swift
+// `OFFunding` hook owns the poll loop, so the bridge only exposes the atomic primitives
+// (create / setPaymentMethod / get / payLink / chains), not the one-call `funding.fund()`.
+
+window.fundingCreateSessionSync = function({ target, amountUnits, metadata, externalId, strict, paymentMethod }) {
+    handleResult('fundingCreateSession', window.openfort.funding.sessions.create({
+        target, amountUnits, metadata, externalId, strict, paymentMethod
+    }));
+};
+
+window.fundingSetPaymentMethodSync = function({ sessionId, paymentMethod, clientSecret }) {
+    handleResult('fundingSetPaymentMethod', window.openfort.funding.sessions.setPaymentMethod(sessionId, {
+        paymentMethod, clientSecret
+    }));
+};
+
+window.fundingGetSessionSync = function({ sessionId, clientSecret }) {
+    handleResult('fundingGetSession', window.openfort.funding.sessions.get(sessionId, { clientSecret }));
+};
+
+window.fundingPayLinkSync = function({ sessionId, clientSecret, amount, asset }) {
+    handleResult('fundingPayLink', window.openfort.funding.payLink({ sessionId, clientSecret, amount, asset }));
+};
+
+window.fundingChainsSync = function() {
+    handleResult('fundingChains', window.openfort.funding.chains());
+};

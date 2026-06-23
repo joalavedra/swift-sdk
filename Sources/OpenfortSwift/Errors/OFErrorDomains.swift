@@ -63,4 +63,11 @@ public struct OFErrorDomains {
     public static let signMessage = "OFSignMessageErrorDomain"
     public static let signTypedData = "OFSignTypedDataErrorDomain"
 
+    // Funding
+    public static let fundingCreateSession = "OFFundingCreateSessionErrorDomain"
+    public static let fundingSetPaymentMethod = "OFFundingSetPaymentMethodErrorDomain"
+    public static let fundingGetSession = "OFFundingGetSessionErrorDomain"
+    public static let fundingPayLink = "OFFundingPayLinkErrorDomain"
+    public static let fundingChains = "OFFundingChainsErrorDomain"
+
 }

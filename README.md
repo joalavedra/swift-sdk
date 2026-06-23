@@ -319,6 +319,50 @@ let response: OFAuthResponse? = try await OFSDK.shared.loginWithSiwe(
 )
 ```
 
+### Funding (cross-chain deposit)
+
+Fund an embedded wallet from any chain or a centralized exchange. `OFFunding` is an
+`ObservableObject` — the SwiftUI counterpart of `@openfort/react`'s `useFunding` hook — that
+creates a deposit session, sets a payment method, and polls until it settles, publishing
+`session` / `status` / `loading` / `error`. Funding authenticates with the project publishable
+key, so it works for guest and authenticated users alike.
+
+```swift
+let funding = OFFunding() // hold with @StateObject in a View
+
+// EVM → EVM (e.g. fund a Base USDC wallet from Polygon USDC)
+let session = try await funding.fund(
+    OFFundingTarget(
+        chain: "eip155:8453",                                   // Base
+        currency: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
+        address: walletAddress
+    ),
+    .evm(source: OFFundingSource(
+        chain: "eip155:137",                                    // from Polygon
+        currency: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // USDC
+        amount: "10000000"                                      // 10 USDC (base units)
+    ))
+)
+// session.paymentMethod?.receiverAddress — address the user sends to
+// session.paymentMethod?.addressUri      — BIP-21 / EIP-681 / Solana Pay URI for a QR
+// session.paymentMethod?.deeplinks       — prefilled wallet deeplinks
+```
+
+In SwiftUI, hold it with `@StateObject` and observe `funding.status` / `funding.session` /
+`funding.loading` to drive the screen. Centralized-exchange deposits use a session-bound
+Coinbase pay-link:
+
+```swift
+let session = try await funding.createSession(target)
+let url = try await funding.payLink(OFPayLinkParams(sessionId: session.id, amount: "25"))
+// open `url`, then watch the session settle:
+try await funding.track(id: session.id, clientSecret: session.clientSecret)
+```
+
+The lower-level namespace is also available directly on `OFSDK.shared` for headless use:
+`fundingCreateSession`, `fundingSetPaymentMethod`, `fundingGetSession`, `fundingPayLink`, and
+`fundingChains` (each with `async` and completion-handler variants).
+
 ## Types
 
 ### Response Types
@@ -331,6 +375,7 @@ let response: OFAuthResponse? = try await OFSDK.shared.loginWithSiwe(
 | `OFSession` | Auth session with `id`, `token`, `userId`, `expiresAt` |
 | `OFEmbeddedAccount` | Embedded wallet account with `address`, `chainType`, `accountType` |
 | `OFSIWEInitResponse` | SIWE init response with `address`, `nonce` |
+| `OFFundingSession` | Deposit session with `status`, `clientSecret`, `target`, `paymentMethod` |
 
 ### Enums
 
